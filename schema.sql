@@ -1,0 +1,34 @@
+-- Run this once in Supabase: Dashboard > SQL Editor > New query > paste > Run
+
+create table if not exists tasks (
+  id text primary key,
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  title text not null,
+  urgent boolean not null default false,
+  important boolean not null default false,
+  bucket text not null default 'inbox',
+  category text not null default 'work',
+  due text,
+  task_date text,
+  recur_days jsonb not null default '[]'::jsonb,
+  completed_dates jsonb not null default '[]'::jsonb,
+  roll_count integer not null default 0,
+  done boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+alter table tasks enable row level security;
+
+create policy "select own tasks" on tasks
+  for select using (auth.uid() = user_id);
+
+create policy "insert own tasks" on tasks
+  for insert with check (auth.uid() = user_id);
+
+create policy "update own tasks" on tasks
+  for update using (auth.uid() = user_id);
+
+create policy "delete own tasks" on tasks
+  for delete using (auth.uid() = user_id);
+
+create index if not exists tasks_user_id_idx on tasks(user_id);
