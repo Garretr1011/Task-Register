@@ -13,6 +13,7 @@ create table if not exists tasks (
   recur_days jsonb not null default '[]'::jsonb,
   completed_dates jsonb not null default '[]'::jsonb,
   roll_count integer not null default 0,
+  sort_order bigint not null default 0,
   done boolean not null default false,
   created_at timestamptz not null default now()
 );

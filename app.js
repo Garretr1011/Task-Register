@@ -81,6 +81,7 @@ function taskToRow(t){
     recur_days: t.recurDays || [],
     completed_dates: t.completedDates || [],
     roll_count: t.rollCount || 0,
+    sort_order: t.sortOrder || 0,
     done: !!t.done,
     created_at: t.createdAt ? new Date(t.createdAt).toISOString() : new Date().toISOString()
   };
@@ -99,6 +100,7 @@ function rowToTask(r){
     recurDays: r.recur_days || [],
     completedDates: r.completed_dates || [],
     rollCount: r.roll_count || 0,
+    sortOrder: r.sort_order || 0,
     done: r.done,
     createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now()
   };
@@ -202,6 +204,7 @@ function addTask(){
     rollCount: 0,
     recurDays,
     completedDates: [],
+    sortOrder: Date.now(),
     done: false,
     createdAt: Date.now()
   };
@@ -361,16 +364,78 @@ function weekdayOf(dateStr){
   return new Date(dateStr+'T00:00:00').getDay();
 }
 
-function shiftViewDate(delta){
+function shiftViewWeek(delta){
   const d = new Date(viewDate+'T00:00:00');
-  d.setDate(d.getDate()+delta);
+  d.setDate(d.getDate()+7*delta);
   viewDate = fmtLocalDate(d);
   renderTodayView();
+}
+
+function selectDay(dateStr){
+  viewDate = dateStr;
+  renderTodayView();
+}
+
+function weekStripHtml(viewDateStr){
+  const d = new Date(viewDateStr+'T00:00:00');
+  const dow = d.getDay();
+  const weekStart = new Date(d);
+  weekStart.setDate(d.getDate()-dow);
+  let html = '';
+  for(let i=0;i<7;i++){
+    const day = new Date(weekStart);
+    day.setDate(weekStart.getDate()+i);
+    const dateStr = fmtLocalDate(day);
+    const isSel = dateStr===viewDateStr;
+    const isTod = dateStr===todayStr();
+    html += `<button type="button" class="daybtn ${isSel?'sel':''} ${isTod && !isSel?'istoday':''}" onclick="selectDay('${dateStr}')">
+        <span class="dbwd">${DAY_LABELS[i].slice(0,1)}</span>
+        <span class="dbnum">${day.getDate()}</span>
+      </button>`;
+  }
+  return html;
 }
 
 function jumpToday(){
   viewDate = todayStr();
   renderTodayView();
+}
+
+const CATS = ['work','personal','issues'];
+const CAT_LABELS = {work:'Work', personal:'Personal', issues:'Issues'};
+
+function sortByOrder(list){
+  return [...list].sort((a,b)=> (a.sortOrder||0)-(b.sortOrder||0));
+}
+
+function contextList(context){
+  if(context.startsWith('bucket:')) return listForBucket(context.slice(7));
+  if(context.startsWith('diary:')) return tasksForDate(context.slice(6));
+  return [];
+}
+
+function contextIsDone(t, context){
+  if(context.startsWith('diary:')) return isDoneForDate(t, context.slice(6));
+  return !!t.done;
+}
+
+function moveTask(id, direction, context){
+  const t = tasks.find(x=>x.id===id);
+  if(!t) return;
+  const cat = t.category || 'work';
+  const group = sortByOrder(contextList(context).filter(x=> (x.category||'work')===cat && !contextIsDone(x, context)));
+  const idx = group.findIndex(x=>x.id===id);
+  const swapIdx = direction==='up' ? idx-1 : idx+1;
+  if(idx<0 || swapIdx<0 || swapIdx>=group.length) return;
+  const other = group[swapIdx];
+  const tmp = t.sortOrder || 0;
+  t.sortOrder = other.sortOrder || 0;
+  other.sortOrder = tmp;
+  persistTask(t);
+  persistTask(other);
+  if(context.startsWith('bucket:')) renderBucketView(context.slice(7));
+  else renderTodayView();
+  renderCounts();
 }
 
 function tasksForDate(dateStr){
@@ -416,13 +481,17 @@ function toggleInstanceDone(evt, id, dateStr){
   renderCounts();
 }
 
-function diaryRowHtml(t, dateStr){
+function diaryRowHtml(t, dateStr, canUp, canDown){
   const q = quadKey(t);
   const done = isDoneForDate(t, dateStr);
+  const context = `diary:${dateStr}`;
   const metaParts = [];
   if(t.bucket==='recurring') metaParts.push('Recurring');
   if(t.due && t.bucket!=='today') metaParts.push('Due ' + t.due);
   if(t.rollCount) metaParts.push(`<span class="rolled">Moved ${t.rollCount}x</span>`);
+  const moveIcons = !done ? `
+        ${canUp?`<span class="act" onclick="moveTask('${t.id}','up','${context}')">&#8593;</span>`:''}
+        ${canDown?`<span class="act" onclick="moveTask('${t.id}','down','${context}')">&#8595;</span>`:''}` : '';
   return `
     <div class="listrow q-${quadClass(t)} cat-${t.category||'work'} ${done?'done':''}">
       <div class="chk" onclick="toggleInstanceDone(event,'${t.id}','${dateStr}')">${done?'✓':''}</div>
@@ -434,7 +503,7 @@ function diaryRowHtml(t, dateStr){
           ${metaParts.map(m=>`<span>${m.startsWith('<')?m:escapeHtml(m)}</span>`).join('')}
         </div>
       </div>
-      <div class="actions">
+      <div class="actions">${moveIcons}
         ${t.bucket!=='recurring'?`<span class="act" onclick="openMoveModal('${t.id}')">&#8594;</span>`:''}
         <span class="act" onclick="openEditModal('${t.id}')">&#9998;</span>
         <span class="act del" onclick="deleteTask('${t.id}')">&times;</span>
@@ -447,24 +516,31 @@ function renderTodayView(){
   const isToday = viewDate === todayStr();
   const list = tasksForDate(viewDate);
   let html = `
-    <div class="diaryhead">
-      <button class="navbtn" onclick="shiftViewDate(-1)">&larr;</button>
-      <div class="diarydate">${fmtDateHeading(viewDate)}${isToday?' <span class="todaybadge">Today</span>':''}</div>
-      <button class="navbtn" onclick="shiftViewDate(1)">&rarr;</button>
+    <div class="weekstrip">
+      <button class="navbtn" onclick="shiftViewWeek(-1)">&larr;</button>
+      <div class="weekdays">${weekStripHtml(viewDate)}</div>
+      <button class="navbtn" onclick="shiftViewWeek(1)">&rarr;</button>
     </div>
+    <div class="diarydate">${fmtDateHeading(viewDate)}${isToday?' <span class="todaybadge">Today</span>':''}</div>
     ${!isToday?'<div class="jumprow"><button class="jumpbtn" onclick="jumpToday()">Jump to today</button></div>':''}`;
-  if(list.length===0){
-    html += `<div class="empty">Nothing on for this day.</div>`;
-  }else{
-    const sorted = [...list].sort((a,b)=> (isDoneForDate(a,viewDate)-isDoneForDate(b,viewDate)) || (b.urgent-a.urgent) || (b.important-a.important));
-    html += sorted.map(t=>diaryRowHtml(t, viewDate)).join('');
-  }
+  let any = false;
+  CATS.forEach(cat=>{
+    const groupAll = list.filter(t=> (t.category||'work')===cat);
+    if(groupAll.length===0) return;
+    any = true;
+    const open = sortByOrder(groupAll.filter(t=>!isDoneForDate(t, viewDate)));
+    const done = sortByOrder(groupAll.filter(t=>isDoneForDate(t, viewDate)));
+    html += `<div class="cathead cathead-${cat}">${CAT_LABELS[cat]}</div>`;
+    open.forEach((t,i)=>{ html += diaryRowHtml(t, viewDate, i>0, i<open.length-1); });
+    done.forEach(t=>{ html += diaryRowHtml(t, viewDate, false, false); });
+  });
+  if(!any) html += `<div class="empty">Nothing on for this day.</div>`;
   el.innerHTML = html;
 }
 
 /* ---------- Bucket views ---------- */
 
-function rowHtml(t){
+function rowHtml(t, context, canUp, canDown){
   const q = quadKey(t);
   const metaParts = [];
   if(t.due) metaParts.push('Due ' + t.due);
@@ -474,6 +550,9 @@ function rowHtml(t){
   if(t.rollCount){
     metaParts.push(`<span class="rolled">Moved ${t.rollCount}x</span>`);
   }
+  const moveIcons = (context && !t.done) ? `
+        ${canUp?`<span class="act" onclick="moveTask('${t.id}','up','${context}')">&#8593;</span>`:''}
+        ${canDown?`<span class="act" onclick="moveTask('${t.id}','down','${context}')">&#8595;</span>`:''}` : '';
   return `
     <div class="listrow q-${quadClass(t)} cat-${t.category||'work'} ${t.done?'done':''}">
       <div class="chk" onclick="toggleDone(event,'${t.id}')">${t.done?'✓':''}</div>
@@ -485,7 +564,7 @@ function rowHtml(t){
           ${metaParts.map(m=>`<span>${m.startsWith('<')?m:escapeHtml(m)}</span>`).join('')}
         </div>
       </div>
-      <div class="actions">
+      <div class="actions">${moveIcons}
         ${t.bucket!=='recurring'?`<span class="act" onclick="openMoveModal('${t.id}')">&#8594;</span>`:''}
         <span class="act" onclick="openEditModal('${t.id}')">&#9998;</span>
         <span class="act del" onclick="deleteTask('${t.id}')">&times;</span>
@@ -520,13 +599,20 @@ function catFilterHtml(bucket){
 function renderBucketView(bucket){
   const el = document.getElementById('view-'+bucket);
   const list = listForBucket(bucket);
+  const context = `bucket:${bucket}`;
   let html = catFilterHtml(bucket);
-  if(list.length===0){
-    html += `<div class="empty">Nothing here. Add a task above.</div>`;
-  }else{
-    const sorted = [...list].sort((a,b)=> (a.done-b.done) || (b.urgent-a.urgent) || (b.important-a.important));
-    html += sorted.map(rowHtml).join('');
-  }
+  let any = false;
+  CATS.forEach(cat=>{
+    const groupAll = list.filter(t=> (t.category||'work')===cat);
+    if(groupAll.length===0) return;
+    any = true;
+    const open = sortByOrder(groupAll.filter(t=>!t.done));
+    const done = sortByOrder(groupAll.filter(t=>t.done));
+    html += `<div class="cathead cathead-${cat}">${CAT_LABELS[cat]}</div>`;
+    open.forEach((t,i)=>{ html += rowHtml(t, context, i>0, i<open.length-1); });
+    done.forEach(t=>{ html += rowHtml(t, context, false, false); });
+  });
+  if(!any) html += `<div class="empty">Nothing here. Add a task above.</div>`;
   el.innerHTML = html;
 }
 
@@ -571,7 +657,7 @@ function renderMatrix(){
     if(groups[k].length===0){
       html += `<div class="empty">Nothing here.</div>`;
     }else{
-      html += groups[k].map(rowHtml).join('');
+      html += sortByOrder(groups[k]).map(t=>rowHtml(t, null, false, false)).join('');
     }
     html += `</div>`;
   });
