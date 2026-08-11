@@ -51,6 +51,16 @@ function todaysQuote(){
   return QUOTES[idx];
 }
 
+function updateClock(){
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('en-AU', {weekday:'short', day:'numeric', month:'short'});
+  const timeStr = now.toLocaleTimeString('en-AU', {hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false});
+  const el = document.getElementById('liveClock');
+  if(el) el.innerHTML = `<span class="clock-date">${dateStr}</span>${timeStr}`;
+}
+updateClock();
+setInterval(updateClock, 1000);
+
 const BUILTIN_CATS = [
   {key:'work', label:'Work', color:'#2B4C7E'},
   {key:'issues', label:'Issues', color:'#7A3FA0'},
@@ -682,27 +692,61 @@ function contextIsDone(t, context){
   return !!t.done;
 }
 
-function moveTask(id, direction, context){
-  const t = tasks.find(x=>x.id===id);
+let dragState = null;
+
+function dragStart(evt, id, context){
+  dragState = {id, context};
+  evt.dataTransfer.effectAllowed = 'move';
+  try{ evt.dataTransfer.setData('text/plain', id); }catch(e){}
+}
+
+function dragOverRow(evt){
+  evt.preventDefault();
+  evt.dataTransfer.dropEffect = 'move';
+}
+
+function dragEnterRow(evt){
+  evt.currentTarget.classList.add('drag-over');
+}
+
+function dragLeaveRow(evt){
+  evt.currentTarget.classList.remove('drag-over');
+}
+
+function dropRow(evt, targetId, context){
+  evt.preventDefault();
+  evt.currentTarget.classList.remove('drag-over');
+  if(!dragState || dragState.context !== context || dragState.id === targetId){ dragState = null; return; }
+  reorderByDrag(dragState.id, targetId, context);
+  dragState = null;
+}
+
+function dragEnd(evt){
+  dragState = null;
+  document.querySelectorAll('.drag-over').forEach(el=>el.classList.remove('drag-over'));
+}
+
+function reorderByDrag(draggedId, targetId, context){
+  const t = tasks.find(x=>x.id===draggedId);
   if(!t) return;
   const cat = t.category || 'work';
   const group = sortByOrder(contextList(context).filter(x=> (x.category||'work')===cat && !contextIsDone(x, context)));
-  const idx = group.findIndex(x=>x.id===id);
-  const swapIdx = direction==='up' ? idx-1 : idx+1;
-  if(idx<0 || swapIdx<0 || swapIdx>=group.length) return;
-  const other = group[swapIdx];
-  const tmp = t.sortOrder || 0;
-  t.sortOrder = other.sortOrder || 0;
-  other.sortOrder = tmp;
-  persistTask(t);
-  persistTask(other);
+  const fromIdx = group.findIndex(x=>x.id===draggedId);
+  const toIdx = group.findIndex(x=>x.id===targetId);
+  if(fromIdx<0 || toIdx<0) return;
+  const [moved] = group.splice(fromIdx,1);
+  group.splice(toIdx,0,moved);
+  group.forEach((item,i)=>{
+    item.sortOrder = (i+1)*1000;
+    persistTask(item);
+  });
   commitHistory();
   if(context.startsWith('bucket:')) renderBucketView(context.slice(7));
   else renderTodayView();
   renderCounts();
 }
 
-function diaryRowHtml(t, dateStr, canUp, canDown){
+function diaryRowHtml(t, dateStr){
   const q = quadKey(t);
   const done = isDoneForDate(t, dateStr);
   const context = `diary:${dateStr}`;
@@ -712,11 +756,12 @@ function diaryRowHtml(t, dateStr, canUp, canDown){
   if(t.bucket==='recurring') metaParts.push('Recurring');
   if(t.due && t.bucket!=='today') metaParts.push('Due ' + t.due);
   if(t.rollCount) metaParts.push(`<span class="rolled">Moved ${t.rollCount}x</span>`);
-  const moveIcons = !done ? `
-        ${canUp?`<span class="act" onclick="moveTask('${t.id}','up','${context}')">&#8593;</span>`:''}
-        ${canDown?`<span class="act" onclick="moveTask('${t.id}','down','${context}')">&#8595;</span>`:''}` : '';
+  const draggable = !done;
+  const dragAttrs = draggable ? `ondragover="dragOverRow(event)" ondragenter="dragEnterRow(event)" ondragleave="dragLeaveRow(event)" ondrop="dropRow(event,'${t.id}','${context}')"` : '';
+  const handle = draggable ? `<span class="draghandle" draggable="true" ondragstart="dragStart(event,'${t.id}','${context}')" ondragend="dragEnd(event)" title="Drag to reorder">&#8942;&#8942;</span>` : '<span class="draghandle-spacer"></span>';
   return `
-    <div class="listrow q-${quadClass(t)} ${rc.cls} ${done?'done':''}" style="${rc.style}">
+    <div class="listrow q-${quadClass(t)} ${rc.cls} ${done?'done':''}" style="${rc.style}" ${dragAttrs}>
+      ${handle}
       <div class="chk" onclick="toggleInstanceDone(event,'${t.id}','${dateStr}')">${done?'✓':''}</div>
       <div class="body">
         <div class="title">${escapeHtml(t.title)}</div>
@@ -726,7 +771,7 @@ function diaryRowHtml(t, dateStr, canUp, canDown){
           ${metaParts.map(m=>`<span>${m.startsWith('<')?m:escapeHtml(m)}</span>`).join('')}
         </div>
       </div>
-      <div class="actions">${moveIcons}
+      <div class="actions">
         ${t.bucket!=='recurring'?`<span class="act" onclick="openMoveModal('${t.id}')">&#8594;</span>`:''}
         <span class="act" onclick="openEditModal('${t.id}')">&#9998;</span>
         <span class="act del" onclick="deleteTask('${t.id}')">&times;</span>
@@ -753,13 +798,13 @@ function renderTodayView(){
     any = true;
     const hc = headCatAttrs(cat.key);
     html += `<div class="cathead ${hc.cls}" style="${hc.style}">${escapeHtml(cat.label)}</div>`;
-    open.forEach((t,i)=>{ html += diaryRowHtml(t, viewDate, i>0, i<open.length-1); });
+    open.forEach((t)=>{ html += diaryRowHtml(t, viewDate); });
   });
   const doneList = sortByOrder(list.filter(t=>isDoneForDate(t, viewDate)));
   if(doneList.length>0){
     any = true;
     html += `<div class="cathead cathead-done">Completed</div>`;
-    doneList.forEach(t=>{ html += diaryRowHtml(t, viewDate, false, false); });
+    doneList.forEach(t=>{ html += diaryRowHtml(t, viewDate); });
   }
   if(!any) html += `<div class="empty">Nothing on for this day.</div>`;
   el.innerHTML = html;
@@ -767,7 +812,7 @@ function renderTodayView(){
 
 /* ---------- Bucket views ---------- */
 
-function rowHtml(t, context, canUp, canDown){
+function rowHtml(t, context){
   const q = quadKey(t);
   const rc = rowCatAttrs(t.category||'work');
   const tc = tagCatAttrs(t.category||'work');
@@ -779,11 +824,12 @@ function rowHtml(t, context, canUp, canDown){
   if(t.rollCount){
     metaParts.push(`<span class="rolled">Moved ${t.rollCount}x</span>`);
   }
-  const moveIcons = (context && !t.done) ? `
-        ${canUp?`<span class="act" onclick="moveTask('${t.id}','up','${context}')">&#8593;</span>`:''}
-        ${canDown?`<span class="act" onclick="moveTask('${t.id}','down','${context}')">&#8595;</span>`:''}` : '';
+  const draggable = context && !t.done;
+  const dragAttrs = draggable ? `ondragover="dragOverRow(event)" ondragenter="dragEnterRow(event)" ondragleave="dragLeaveRow(event)" ondrop="dropRow(event,'${t.id}','${context}')"` : '';
+  const handle = draggable ? `<span class="draghandle" draggable="true" ondragstart="dragStart(event,'${t.id}','${context}')" ondragend="dragEnd(event)" title="Drag to reorder">&#8942;&#8942;</span>` : '<span class="draghandle-spacer"></span>';
   return `
-    <div class="listrow q-${quadClass(t)} ${rc.cls} ${t.done?'done':''}" style="${rc.style}">
+    <div class="listrow q-${quadClass(t)} ${rc.cls} ${t.done?'done':''}" style="${rc.style}" ${dragAttrs}>
+      ${handle}
       <div class="chk" onclick="toggleDone(event,'${t.id}')">${t.done?'✓':''}</div>
       <div class="body">
         <div class="title">${escapeHtml(t.title)}</div>
@@ -793,7 +839,7 @@ function rowHtml(t, context, canUp, canDown){
           ${metaParts.map(m=>`<span>${m.startsWith('<')?m:escapeHtml(m)}</span>`).join('')}
         </div>
       </div>
-      <div class="actions">${moveIcons}
+      <div class="actions">
         ${t.bucket!=='recurring'?`<span class="act" onclick="openMoveModal('${t.id}')">&#8594;</span>`:''}
         <span class="act" onclick="openEditModal('${t.id}')">&#9998;</span>
         <span class="act del" onclick="deleteTask('${t.id}')">&times;</span>
@@ -853,13 +899,13 @@ function renderBucketView(bucket){
     any = true;
     const hc = headCatAttrs(cat.key);
     html += `<div class="cathead ${hc.cls}" style="${hc.style}">${escapeHtml(cat.label)}</div>`;
-    open.forEach((t,i)=>{ html += rowHtml(t, context, i>0, i<open.length-1); });
+    open.forEach((t)=>{ html += rowHtml(t, context); });
   });
   const doneList = sortByOrder(list.filter(t=>t.done));
   if(doneList.length>0){
     any = true;
     html += `<div class="cathead cathead-done">Completed</div>`;
-    doneList.forEach(t=>{ html += rowHtml(t, context, false, false); });
+    doneList.forEach(t=>{ html += rowHtml(t, context); });
   }
   if(!any) html += `<div class="empty">Nothing here. Add a task above.</div>`;
   el.innerHTML = html;
@@ -906,7 +952,7 @@ function renderMatrix(){
     if(groups[k].length===0){
       html += `<div class="empty">Nothing here.</div>`;
     }else{
-      html += sortByOrder(groups[k]).map(t=>rowHtml(t, null, false, false)).join('');
+      html += sortByOrder(groups[k]).map(t=>rowHtml(t, null)).join('');
     }
     html += `</div>`;
   });

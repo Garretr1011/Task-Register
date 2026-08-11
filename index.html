@@ -32,22 +32,23 @@
     </div>
     <button class="signout-btn" onclick="signOut()">Sign out</button>
   </div>
-  <div class="undoredo">
-    <button class="navbtn" id="undoBtn" onclick="undo()" title="Undo">&#8630;</button>
-    <button class="navbtn" id="redoBtn" onclick="redo()" title="Redo">&#8631;</button>
-  </div>
-  <div class="tb-fields" id="statFields">
-    <div class="tb-field" onclick="filterOpen()"><span class="num" id="statOpen">0</span><span class="lbl">Open</span></div>
-    <div class="tb-field" onclick="switchTab('today')"><span class="num" id="statToday">0</span><span class="lbl">Today</span></div>
-    <div class="tb-field" onclick="filterDoFirst()"><span class="num" id="statUrgent">0</span><span class="lbl">Do First</span></div>
+  <div class="tb-right">
+    <div class="clock" id="liveClock"></div>
+    <div class="undoredo">
+      <button class="navbtn" id="undoBtn" onclick="undo()" title="Undo">&#8630;</button>
+      <button class="navbtn" id="redoBtn" onclick="redo()" title="Redo">&#8631;</button>
+    </div>
   </div>
 </div>
 
-<div class="weekstats">
-  <div class="ws-item"><span class="ws-num" id="wsCompleted">0</span><span class="ws-lbl">Completed This Week</span></div>
-  <div class="ws-item"><span class="ws-num" id="wsAdded">0</span><span class="ws-lbl">Added This Week</span></div>
-  <div class="ws-item"><span class="ws-num" id="wsDue">0</span><span class="ws-lbl">Due This Week</span></div>
-  <div class="ws-item"><span class="ws-num" id="wsRate">0%</span><span class="ws-lbl">Completion Rate</span></div>
+<div class="statsbar">
+  <div class="stat-chip" onclick="filterOpen()"><span class="num" id="statOpen">0</span><span class="lbl">Open</span></div>
+  <div class="stat-chip" onclick="switchTab('today')"><span class="num" id="statToday">0</span><span class="lbl">Today</span></div>
+  <div class="stat-chip" onclick="filterDoFirst()"><span class="num" id="statUrgent">0</span><span class="lbl">Do First</span></div>
+  <div class="stat-chip"><span class="num" id="wsCompleted">0</span><span class="lbl">Done Wk</span></div>
+  <div class="stat-chip"><span class="num" id="wsAdded">0</span><span class="lbl">Added Wk</span></div>
+  <div class="stat-chip"><span class="num" id="wsDue">0</span><span class="lbl">Due Wk</span></div>
+  <div class="stat-chip"><span class="num" id="wsRate">0%</span><span class="lbl">Rate</span></div>
 </div>
 
 <div class="quickadd">

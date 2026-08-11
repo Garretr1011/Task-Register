@@ -87,102 +87,102 @@ body{
 .titleblock{
   background:var(--ink);
   border-bottom:3px solid var(--accent);
-  padding:14px 20px;
+  padding:10px 20px;
   display:flex;
-  align-items:flex-end;
+  align-items:flex-start;
   justify-content:space-between;
   flex-wrap:wrap;
   gap:16px;
 }
 .titleblock h1{
   font-family:'Space Grotesk',sans-serif;
-  font-size:20px;
+  font-size:18px;
   font-weight:700;
   letter-spacing:0.02em;
   margin:0;
   color:var(--on-dark);
 }
 .titleblock .sub{
-  font-size:11px;
+  font-size:10px;
   color:var(--on-dark-soft);
   text-transform:uppercase;
   letter-spacing:0.08em;
   margin-top:2px;
 }
 .quote{
-  font-size:12px;
+  font-size:11px;
   font-style:italic;
   color:var(--on-dark-soft);
-  margin-top:6px;
-  max-width:480px;
+  margin-top:4px;
+  max-width:460px;
+}
+.tb-left{display:flex; flex-direction:column; gap:6px;}
+.tb-right{
+  display:flex;
+  align-items:center;
+  gap:14px;
+  flex-wrap:wrap;
+}
+.clock{
+  font-family:'JetBrains Mono',monospace;
+  font-size:14px;
+  font-weight:500;
+  color:var(--on-dark);
+  text-align:right;
+  line-height:1.3;
+  white-space:nowrap;
+}
+.clock .clock-date{
+  font-size:9px;
+  color:var(--on-dark-soft);
+  text-transform:uppercase;
+  letter-spacing:0.05em;
+  display:block;
 }
 .undoredo{
   display:flex;
   gap:6px;
 }
-.weekstats{
+.undoredo .navbtn{
+  background:transparent;
+  border-color:var(--on-dark-line);
+  color:var(--on-dark);
+  width:28px; height:28px;
+}
+.undoredo .navbtn:hover{background:rgba(255,255,255,0.1);}
+.undoredo .navbtn:disabled{opacity:0.3; cursor:not-allowed;}
+.undoredo .navbtn:disabled:hover{background:transparent;}
+
+.statsbar{
   display:flex;
   background:var(--surface);
   border-bottom:1px solid var(--line);
   overflow-x:auto;
 }
-.ws-item{
-  flex:1;
-  min-width:130px;
-  padding:12px 16px;
+.stat-chip{
+  padding:5px 12px;
   border-right:1px solid var(--line);
   text-align:center;
+  min-width:58px;
+  flex-shrink:0;
 }
-.ws-item:last-child{border-right:none;}
-.ws-num{
+.stat-chip:last-child{border-right:none;}
+.stat-chip[onclick]{cursor:pointer;}
+.stat-chip[onclick]:hover{background:var(--accent-soft);}
+.stat-chip .num{
   font-family:'JetBrains Mono',monospace;
-  font-size:22px;
+  font-size:15px;
   font-weight:600;
   display:block;
-  color:var(--accent-dark);
+  color:var(--ink);
 }
-.ws-lbl{
-  font-size:10px;
+.stat-chip .lbl{
+  font-size:8px;
   text-transform:uppercase;
-  letter-spacing:0.05em;
+  letter-spacing:0.03em;
   color:var(--ink-soft);
+  white-space:nowrap;
 }
-.tb-left{display:flex; flex-direction:column; gap:8px;}
-.tb-fields{
-  display:flex;
-  gap:0;
-  border:1px solid var(--on-dark-line);
-}
-.tb-field{
-  padding:6px 14px;
-  border-right:1px solid var(--on-dark-line);
-  text-align:center;
-  min-width:64px;
-  cursor:pointer;
-}
-.tb-field:hover{background:rgba(255,255,255,0.08);}
-.tb-field:last-child{border-right:none;}
-.tb-field .num{
-  font-family:'JetBrains Mono',monospace;
-  font-size:18px;
-  font-weight:500;
-  display:block;
-  color:var(--on-dark);
-}
-.tb-field .lbl{
-  font-size:9px;
-  text-transform:uppercase;
-  letter-spacing:0.06em;
-  color:var(--on-dark-soft);
-}
-.undoredo .navbtn{
-  background:transparent;
-  border-color:var(--on-dark-line);
-  color:var(--on-dark);
-}
-.undoredo .navbtn:hover{background:rgba(255,255,255,0.1);}
-.undoredo .navbtn:disabled{opacity:0.3; cursor:not-allowed;}
-.undoredo .navbtn:disabled:hover{background:transparent;}
 
 /* ---- Quick add ---- */
 .quickadd{
@@ -497,6 +497,18 @@ main{padding:20px; max-width:1100px; margin:0 auto;}
 .act:hover{background:var(--accent-soft); color:var(--accent);}
 .act.del{font-size:17px;}
 .act.del:hover{background:var(--q1-soft); color:var(--q1);}
+.draghandle{
+  cursor:grab;
+  color:var(--ink-soft);
+  font-size:14px;
+  padding:0 4px;
+  flex-shrink:0;
+  line-height:1;
+  user-select:none;
+}
+.draghandle:active{cursor:grabbing;}
+.draghandle-spacer{width:18px; flex-shrink:0;}
+.listrow.drag-over{border-top:3px solid var(--accent);}
 
 /* ---- Modals ---- */
 .modal-overlay{
