@@ -278,6 +278,7 @@ async function loadTasks(){
     tasks = [];
   }
   await rolloverTasks();
+  initHistory();
   document.getElementById('qaDue').value = todayStr();
   document.getElementById('dailyQuote').textContent = todaysQuote();
   render();
@@ -290,6 +291,7 @@ async function rolloverTasks(){
     if(t.bucket==='inbox'){
       t.bucket = 'today';
       t.taskDate = today;
+      t.due = today;
       t.rollCount = 0;
       changed.push(t);
     }
@@ -297,6 +299,7 @@ async function rolloverTasks(){
   tasks.forEach(t=>{
     if(t.bucket==='today' && !t.done && t.taskDate && t.taskDate < today){
       t.taskDate = today;
+      t.due = today;
       t.rollCount = (t.rollCount||0) + 1;
       changed.push(t);
     }
@@ -305,6 +308,62 @@ async function rolloverTasks(){
 }
 
 function uid(){ return 't' + Date.now() + Math.random().toString(36).slice(2,7); }
+
+let history = [];
+let historyIndex = -1;
+const MAX_HISTORY = 50;
+
+function snapshotTasks(){
+  return JSON.parse(JSON.stringify(tasks));
+}
+
+function initHistory(){
+  history = [snapshotTasks()];
+  historyIndex = 0;
+  updateUndoRedoButtons();
+}
+
+function commitHistory(){
+  history = history.slice(0, historyIndex+1);
+  history.push(snapshotTasks());
+  historyIndex = history.length - 1;
+  if(history.length > MAX_HISTORY){
+    history.shift();
+    historyIndex--;
+  }
+  updateUndoRedoButtons();
+}
+
+function updateUndoRedoButtons(){
+  const u = document.getElementById('undoBtn');
+  const r = document.getElementById('redoBtn');
+  if(u) u.disabled = historyIndex <= 0;
+  if(r) r.disabled = historyIndex >= history.length - 1;
+}
+
+async function applySnapshot(snapshot){
+  const oldIds = new Set(tasks.map(t=>t.id));
+  const newIds = new Set(snapshot.map(t=>t.id));
+  const toDelete = [...oldIds].filter(id=>!newIds.has(id));
+  tasks = JSON.parse(JSON.stringify(snapshot));
+  for(const id of toDelete){ await removeTaskRemote(id); }
+  for(const t of tasks){ await persistTask(t); }
+  render();
+}
+
+function undo(){
+  if(historyIndex <= 0) return;
+  historyIndex--;
+  updateUndoRedoButtons();
+  applySnapshot(history[historyIndex]);
+}
+
+function redo(){
+  if(historyIndex >= history.length - 1) return;
+  historyIndex++;
+  updateUndoRedoButtons();
+  applySnapshot(history[historyIndex]);
+}
 
 /* ---------- Celebration ---------- */
 
@@ -353,7 +412,7 @@ function addTask(){
     id: uid(),
     title, urgent, important, bucket, due,
     category,
-    taskDate: bucket==='today' ? todayStr() : null,
+    taskDate: bucket==='today' ? due : null,
     rollCount: 0,
     recurDays,
     completedDates: [],
@@ -369,6 +428,7 @@ function addTask(){
   document.getElementById('qaDue').value = todayStr();
   document.querySelectorAll('#recurDays .day-chip.on').forEach(el=>el.classList.remove('on'));
   persistTask(newTask);
+  commitHistory();
   render();
 }
 
@@ -386,12 +446,14 @@ function toggleDone(evt, id){
     if(t.done && evt) celebrate(evt.currentTarget);
     persistTask(t);
   }
+  commitHistory();
   render();
 }
 
 function deleteTask(id){
   tasks = tasks.filter(x=>x.id!==id);
   removeTaskRemote(id);
+  commitHistory();
   render();
 }
 
@@ -446,13 +508,15 @@ function saveEdit(){
     t.recurDays = [];
     document.querySelectorAll('#editRecurDays .day-chip.on').forEach(el=> t.recurDays.push(parseInt(el.dataset.d)));
   }
-  if(newBucket==='today' && t.bucket!=='today'){
-    t.taskDate = todayStr();
-    t.rollCount = 0;
+  if(newBucket==='today'){
+    if(t.bucket!=='today') t.rollCount = 0;
+    t.taskDate = t.due || todayStr();
+    if(!t.due) t.due = t.taskDate;
   }
   t.bucket = newBucket;
   closeEditModal();
   persistTask(t);
+  commitHistory();
   render();
 }
 
@@ -484,12 +548,14 @@ function confirmMove(){
   if(!t || !newDate) return;
   if(t.bucket==='today'){
     t.taskDate = newDate;
+    t.due = newDate;
     t.rollCount = 0;
   }else{
     t.due = newDate;
   }
   closeMoveModal();
   persistTask(t);
+  commitHistory();
   render();
 }
 
@@ -596,6 +662,7 @@ function toggleInstanceDone(evt, id, dateStr){
   }
   if(nowDone && evt) celebrate(evt.currentTarget);
   persistTask(t);
+  commitHistory();
   renderTodayView();
   renderCounts();
 }
@@ -629,6 +696,7 @@ function moveTask(id, direction, context){
   other.sortOrder = tmp;
   persistTask(t);
   persistTask(other);
+  commitHistory();
   if(context.startsWith('bucket:')) renderBucketView(context.slice(7));
   else renderTodayView();
   renderCounts();
