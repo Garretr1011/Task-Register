@@ -15,6 +15,7 @@ create table if not exists tasks (
   roll_count integer not null default 0,
   sort_order bigint not null default 0,
   done boolean not null default false,
+  completed_at timestamptz,
   created_at timestamptz not null default now()
 );
 

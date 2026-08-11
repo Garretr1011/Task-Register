@@ -7,6 +7,50 @@ let viewDate = null;
 let categoryFilter = {week:'all', recurring:'all'};
 const DAY_LABELS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
+const QUOTES = [
+  "Progress beats perfection on a Monday morning.",
+  "Small tasks cleared today are big problems avoided tomorrow.",
+  "A tidy list makes for a clear head.",
+  "Done is a decision, not an accident.",
+  "The work you finish first is the weight you carry least.",
+  "Momentum is built one ticked box at a time.",
+  "Plan the day before the day plans you.",
+  "Clarity is a to-do list with the noise removed.",
+  "Every deadline met is a promise kept.",
+  "Start with the task you're avoiding.",
+  "Good order today saves a bad scramble tomorrow.",
+  "A short list, done properly, beats a long list half-finished.",
+  "What gets scheduled gets shipped.",
+  "The busiest days reward the clearest priorities.",
+  "One task at a time still adds up fast.",
+  "Discipline is choosing what matters before the day chooses for you.",
+  "Finishing is a habit, not a mood.",
+  "The list doesn't shrink itself — but it will, one line at a time.",
+  "A well-run day starts with a well-run list.",
+  "Steady work outpaces frantic work.",
+  "Today's effort is tomorrow's easier morning.",
+  "Nothing clears the mind like a cleared inbox.",
+  "Consistency is the quiet advantage.",
+  "Prioritise hard, then work easy.",
+  "The task ticked off is worth more than the task planned.",
+  "Order first, speed follows.",
+  "Small wins compound into big weeks.",
+  "Focus is choosing one thing on purpose.",
+  "The best time to start was earlier. The next best time is now.",
+  "A clear list is a clear conscience."
+];
+
+function dayOfYear(d){
+  const start = new Date(d.getFullYear(), 0, 0);
+  const diff = d - start;
+  return Math.floor(diff / 86400000);
+}
+
+function todaysQuote(){
+  const idx = dayOfYear(new Date()) % QUOTES.length;
+  return QUOTES[idx];
+}
+
 const BUILTIN_CATS = [
   {key:'work', label:'Work', color:'#2B4C7E'},
   {key:'issues', label:'Issues', color:'#7A3FA0'},
@@ -180,6 +224,7 @@ function taskToRow(t){
     roll_count: t.rollCount || 0,
     sort_order: t.sortOrder || 0,
     done: !!t.done,
+    completed_at: t.completedAt ? new Date(t.completedAt).toISOString() : null,
     created_at: t.createdAt ? new Date(t.createdAt).toISOString() : new Date().toISOString()
   };
 }
@@ -199,6 +244,7 @@ function rowToTask(r){
     rollCount: r.roll_count || 0,
     sortOrder: r.sort_order || 0,
     done: r.done,
+    completedAt: r.completed_at ? new Date(r.completed_at).getTime() : null,
     createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now()
   };
 }
@@ -233,6 +279,7 @@ async function loadTasks(){
   }
   await rolloverTasks();
   document.getElementById('qaDue').value = todayStr();
+  document.getElementById('dailyQuote').textContent = todaysQuote();
   render();
 }
 
@@ -312,6 +359,7 @@ function addTask(){
     completedDates: [],
     sortOrder: Date.now(),
     done: false,
+    completedAt: null,
     createdAt: Date.now()
   };
   tasks.push(newTask);
@@ -334,6 +382,7 @@ function toggleDone(evt, id){
   const t = tasks.find(x=>x.id===id);
   if(t){
     t.done = !t.done;
+    t.completedAt = t.done ? Date.now() : null;
     if(t.done && evt) celebrate(evt.currentTarget);
     persistTask(t);
   }
@@ -542,6 +591,7 @@ function toggleInstanceDone(evt, id, dateStr){
     else { t.completedDates.push(dateStr); nowDone=true; }
   }else{
     t.done = !t.done;
+    t.completedAt = t.done ? Date.now() : null;
     nowDone = t.done;
   }
   if(nowDone && evt) celebrate(evt.currentTarget);
@@ -806,6 +856,49 @@ function switchTab(view){
   render();
 }
 
+function statsWeekRange(){
+  const d = new Date();
+  const dow = d.getDay();
+  const start = new Date(d);
+  start.setDate(d.getDate()-dow);
+  const end = new Date(start);
+  end.setDate(start.getDate()+6);
+  return {start: fmtLocalDate(start), end: fmtLocalDate(end)};
+}
+
+function completedThisWeekCount(){
+  const {start, end} = statsWeekRange();
+  let n = 0;
+  tasks.forEach(t=>{
+    if(t.bucket==='recurring'){
+      (t.completedDates||[]).forEach(ds=>{ if(ds>=start && ds<=end) n++; });
+    }else if(t.done && t.completedAt){
+      const ds = fmtLocalDate(new Date(t.completedAt));
+      if(ds>=start && ds<=end) n++;
+    }
+  });
+  return n;
+}
+
+function addedThisWeekCount(){
+  const {start, end} = statsWeekRange();
+  return tasks.filter(t=>{
+    const ds = fmtLocalDate(new Date(t.createdAt));
+    return ds>=start && ds<=end;
+  }).length;
+}
+
+function renderWeekStats(){
+  const completed = completedThisWeekCount();
+  const added = addedThisWeekCount();
+  const due = weekTotalOpen();
+  const rate = (completed+due)>0 ? Math.round((completed/(completed+due))*100) : 0;
+  document.getElementById('wsCompleted').textContent = completed;
+  document.getElementById('wsAdded').textContent = added;
+  document.getElementById('wsDue').textContent = due;
+  document.getElementById('wsRate').textContent = rate + '%';
+}
+
 function renderCounts(){
   const todayN = tasksForDate(todayStr()).filter(t=>!isDoneForDate(t, todayStr())).length;
   document.getElementById('cnt-today').textContent = todayN>0 ? todayN : '';
@@ -816,6 +909,7 @@ function renderCounts(){
   document.getElementById('statOpen').textContent = tasks.filter(t=>!t.done).length;
   document.getElementById('statToday').textContent = todayN;
   document.getElementById('statUrgent').textContent = tasks.filter(t=>t.urgent && t.important && !t.done).length;
+  renderWeekStats();
 }
 
 function render(){

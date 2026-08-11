@@ -28,6 +28,7 @@
     <div>
       <h1>Task Register</h1>
       <div class="sub">BSF Design Solutions — Personal</div>
+      <div class="quote" id="dailyQuote"></div>
     </div>
     <button class="signout-btn" onclick="signOut()">Sign out</button>
   </div>
@@ -36,6 +37,13 @@
     <div class="tb-field" onclick="switchTab('today')"><span class="num" id="statToday">0</span><span class="lbl">Today</span></div>
     <div class="tb-field" onclick="filterDoFirst()"><span class="num" id="statUrgent">0</span><span class="lbl">Do First</span></div>
   </div>
+</div>
+
+<div class="weekstats">
+  <div class="ws-item"><span class="ws-num" id="wsCompleted">0</span><span class="ws-lbl">Completed This Week</span></div>
+  <div class="ws-item"><span class="ws-num" id="wsAdded">0</span><span class="ws-lbl">Added This Week</span></div>
+  <div class="ws-item"><span class="ws-num" id="wsDue">0</span><span class="ws-lbl">Due This Week</span></div>
+  <div class="ws-item"><span class="ws-num" id="wsRate">0%</span><span class="ws-lbl">Completion Rate</span></div>
 </div>
 
 <div class="quickadd">

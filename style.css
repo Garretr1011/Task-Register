@@ -104,6 +104,39 @@ body{
   letter-spacing:0.08em;
   margin-top:2px;
 }
+.quote{
+  font-size:12px;
+  font-style:italic;
+  color:var(--ink-soft);
+  margin-top:6px;
+  max-width:480px;
+}
+.weekstats{
+  display:flex;
+  background:var(--surface);
+  border-bottom:1px solid var(--line);
+  overflow-x:auto;
+}
+.ws-item{
+  flex:1;
+  min-width:130px;
+  padding:12px 16px;
+  border-right:1px solid var(--line);
+  text-align:center;
+}
+.ws-item:last-child{border-right:none;}
+.ws-num{
+  font-family:'JetBrains Mono',monospace;
+  font-size:22px;
+  font-weight:600;
+  display:block;
+}
+.ws-lbl{
+  font-size:10px;
+  text-transform:uppercase;
+  letter-spacing:0.05em;
+  color:var(--ink-soft);
+}
 .tb-left{display:flex; flex-direction:column; gap:8px;}
 .tb-fields{
   display:flex;
