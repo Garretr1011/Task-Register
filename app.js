@@ -2,10 +2,81 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let currentUser = null;
 
 let tasks = [];
-let activeTab = 'inbox';
+let activeTab = 'today';
 let viewDate = null;
-let categoryFilter = {inbox:'all', today:'all', week:'all', recurring:'all'};
+let categoryFilter = {week:'all', recurring:'all'};
 const DAY_LABELS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+const BUILTIN_CATS = [
+  {key:'work', label:'Work', color:'#2B4C7E'},
+  {key:'issues', label:'Issues', color:'#7A3FA0'},
+  {key:'personal', label:'Personal', color:'#2F7D4F'}
+];
+let customCategories = [];
+
+function allCategories(){ return [...BUILTIN_CATS, ...customCategories]; }
+function getCategory(key){ return allCategories().find(c=>c.key===key) || BUILTIN_CATS[0]; }
+function isBuiltinCat(key){ return BUILTIN_CATS.some(c=>c.key===key); }
+
+function lightenHex(hex, amt){
+  hex = hex.replace('#','');
+  const r = parseInt(hex.substring(0,2),16);
+  const g = parseInt(hex.substring(2,4),16);
+  const b = parseInt(hex.substring(4,6),16);
+  const nr = Math.round(r + (255-r)*amt);
+  const ng = Math.round(g + (255-g)*amt);
+  const nb = Math.round(b + (255-b)*amt);
+  return `rgb(${nr},${ng},${nb})`;
+}
+
+function rowCatAttrs(catKey){
+  if(isBuiltinCat(catKey)) return {cls:`cat-${catKey}`, style:''};
+  const c = getCategory(catKey);
+  return {cls:'', style:`background:${lightenHex(c.color,0.82)};`};
+}
+function tagCatAttrs(catKey){
+  if(isBuiltinCat(catKey)) return {cls:catKey, style:''};
+  const c = getCategory(catKey);
+  return {cls:'', style:`background:${lightenHex(c.color,0.68)};color:${c.color};`};
+}
+function headCatAttrs(catKey){
+  if(isBuiltinCat(catKey)) return {cls:`cathead-${catKey}`, style:''};
+  const c = getCategory(catKey);
+  return {cls:'', style:`color:${c.color};`};
+}
+
+function refreshCategoryDropdowns(){
+  const cats = allCategories();
+  ['qaCategory','editCategory'].forEach(id=>{
+    const sel = document.getElementById(id);
+    if(!sel) return;
+    const current = sel.value;
+    sel.innerHTML = cats.map(c=>`<option value="${c.key}">${escapeHtml(c.label)}</option>`).join('');
+    if(cats.some(c=>c.key===current)) sel.value = current;
+  });
+}
+
+function openCategoryModal(){
+  document.getElementById('newCatName').value = '';
+  document.getElementById('newCatColor').value = '#2B4C7E';
+  document.getElementById('categoryModal').style.display = 'flex';
+}
+function closeCategoryModal(){
+  document.getElementById('categoryModal').style.display = 'none';
+}
+function saveNewCategory(){
+  const name = document.getElementById('newCatName').value.trim();
+  if(!name) return;
+  const color = document.getElementById('newCatColor').value;
+  const key = 'cat_' + Date.now();
+  const newCat = {key, label:name, color};
+  customCategories.push(newCat);
+  persistCategory(newCat);
+  refreshCategoryDropdowns();
+  closeCategoryModal();
+  document.getElementById('qaCategory').value = key;
+  render();
+}
 
 /* ---------- Auth ---------- */
 
@@ -28,9 +99,11 @@ function showAuth(){
   document.getElementById('appScreen').style.display = 'none';
 }
 
-function showApp(){
+async function showApp(){
   document.getElementById('authScreen').style.display = 'none';
   document.getElementById('appScreen').style.display = 'block';
+  await loadCategories();
+  refreshCategoryDropdowns();
   loadTasks();
 }
 
@@ -65,7 +138,31 @@ function fmtLocalDate(d){
 }
 function todayStr(){ return fmtLocalDate(new Date()); }
 
-/* ---------- Persistence ---------- */
+/* ---------- Categories persistence ---------- */
+
+async function loadCategories(){
+  try{
+    const { data, error } = await sb.from('categories').select('*').order('created_at', { ascending:true });
+    if(error) throw error;
+    customCategories = (data||[]).map(r=>({key:r.id, label:r.label, color:r.color}));
+  }catch(e){
+    console.error('Load categories failed', e);
+    customCategories = [];
+  }
+}
+
+async function persistCategory(cat){
+  try{
+    const { error } = await sb.from('categories').upsert({
+      id: cat.key, user_id: currentUser.id, label: cat.label, color: cat.color
+    });
+    if(error) console.error('Save category failed', error);
+  }catch(e){
+    console.error('Save category failed', e);
+  }
+}
+
+/* ---------- Tasks persistence ---------- */
 
 function taskToRow(t){
   return {
@@ -135,12 +232,21 @@ async function loadTasks(){
     tasks = [];
   }
   await rolloverTasks();
+  document.getElementById('qaDue').value = todayStr();
   render();
 }
 
 async function rolloverTasks(){
   const today = todayStr();
   const changed = [];
+  tasks.forEach(t=>{
+    if(t.bucket==='inbox'){
+      t.bucket = 'today';
+      t.taskDate = today;
+      t.rollCount = 0;
+      changed.push(t);
+    }
+  });
   tasks.forEach(t=>{
     if(t.bucket==='today' && !t.done && t.taskDate && t.taskDate < today){
       t.taskDate = today;
@@ -212,7 +318,7 @@ function addTask(){
   titleEl.value='';
   document.getElementById('chipUrgent').classList.remove('on-urgent');
   document.getElementById('chipImportant').classList.remove('on-important');
-  document.getElementById('qaDue').value='';
+  document.getElementById('qaDue').value = todayStr();
   document.querySelectorAll('#recurDays .day-chip.on').forEach(el=>el.classList.remove('on'));
   persistTask(newTask);
   render();
@@ -401,43 +507,6 @@ function jumpToday(){
   renderTodayView();
 }
 
-const CATS = ['work','personal','issues'];
-const CAT_LABELS = {work:'Work', personal:'Personal', issues:'Issues'};
-
-function sortByOrder(list){
-  return [...list].sort((a,b)=> (a.sortOrder||0)-(b.sortOrder||0));
-}
-
-function contextList(context){
-  if(context.startsWith('bucket:')) return listForBucket(context.slice(7));
-  if(context.startsWith('diary:')) return tasksForDate(context.slice(6));
-  return [];
-}
-
-function contextIsDone(t, context){
-  if(context.startsWith('diary:')) return isDoneForDate(t, context.slice(6));
-  return !!t.done;
-}
-
-function moveTask(id, direction, context){
-  const t = tasks.find(x=>x.id===id);
-  if(!t) return;
-  const cat = t.category || 'work';
-  const group = sortByOrder(contextList(context).filter(x=> (x.category||'work')===cat && !contextIsDone(x, context)));
-  const idx = group.findIndex(x=>x.id===id);
-  const swapIdx = direction==='up' ? idx-1 : idx+1;
-  if(idx<0 || swapIdx<0 || swapIdx>=group.length) return;
-  const other = group[swapIdx];
-  const tmp = t.sortOrder || 0;
-  t.sortOrder = other.sortOrder || 0;
-  other.sortOrder = tmp;
-  persistTask(t);
-  persistTask(other);
-  if(context.startsWith('bucket:')) renderBucketView(context.slice(7));
-  else renderTodayView();
-  renderCounts();
-}
-
 function tasksForDate(dateStr){
   const wd = weekdayOf(dateStr);
   const seen = new Set();
@@ -481,10 +550,46 @@ function toggleInstanceDone(evt, id, dateStr){
   renderCounts();
 }
 
+function sortByOrder(list){
+  return [...list].sort((a,b)=> (a.sortOrder||0)-(b.sortOrder||0));
+}
+
+function contextList(context){
+  if(context.startsWith('bucket:')) return listForBucket(context.slice(7));
+  if(context.startsWith('diary:')) return tasksForDate(context.slice(6));
+  return [];
+}
+
+function contextIsDone(t, context){
+  if(context.startsWith('diary:')) return isDoneForDate(t, context.slice(6));
+  return !!t.done;
+}
+
+function moveTask(id, direction, context){
+  const t = tasks.find(x=>x.id===id);
+  if(!t) return;
+  const cat = t.category || 'work';
+  const group = sortByOrder(contextList(context).filter(x=> (x.category||'work')===cat && !contextIsDone(x, context)));
+  const idx = group.findIndex(x=>x.id===id);
+  const swapIdx = direction==='up' ? idx-1 : idx+1;
+  if(idx<0 || swapIdx<0 || swapIdx>=group.length) return;
+  const other = group[swapIdx];
+  const tmp = t.sortOrder || 0;
+  t.sortOrder = other.sortOrder || 0;
+  other.sortOrder = tmp;
+  persistTask(t);
+  persistTask(other);
+  if(context.startsWith('bucket:')) renderBucketView(context.slice(7));
+  else renderTodayView();
+  renderCounts();
+}
+
 function diaryRowHtml(t, dateStr, canUp, canDown){
   const q = quadKey(t);
   const done = isDoneForDate(t, dateStr);
   const context = `diary:${dateStr}`;
+  const rc = rowCatAttrs(t.category||'work');
+  const tc = tagCatAttrs(t.category||'work');
   const metaParts = [];
   if(t.bucket==='recurring') metaParts.push('Recurring');
   if(t.due && t.bucket!=='today') metaParts.push('Due ' + t.due);
@@ -493,13 +598,13 @@ function diaryRowHtml(t, dateStr, canUp, canDown){
         ${canUp?`<span class="act" onclick="moveTask('${t.id}','up','${context}')">&#8593;</span>`:''}
         ${canDown?`<span class="act" onclick="moveTask('${t.id}','down','${context}')">&#8595;</span>`:''}` : '';
   return `
-    <div class="listrow q-${quadClass(t)} cat-${t.category||'work'} ${done?'done':''}">
+    <div class="listrow q-${quadClass(t)} ${rc.cls} ${done?'done':''}" style="${rc.style}">
       <div class="chk" onclick="toggleInstanceDone(event,'${t.id}','${dateStr}')">${done?'✓':''}</div>
       <div class="body">
         <div class="title">${escapeHtml(t.title)}</div>
         <div class="meta">
           <span class="tag ${q}">${quadLabel(q)}</span>
-          <span class="tag cat ${t.category||'work'}">${t.category||'work'}</span>
+          <span class="tag cat ${tc.cls}" style="${tc.style}">${escapeHtml(getCategory(t.category||'work').label)}</span>
           ${metaParts.map(m=>`<span>${m.startsWith('<')?m:escapeHtml(m)}</span>`).join('')}
         </div>
       </div>
@@ -524,16 +629,20 @@ function renderTodayView(){
     <div class="diarydate">${fmtDateHeading(viewDate)}${isToday?' <span class="todaybadge">Today</span>':''}</div>
     ${!isToday?'<div class="jumprow"><button class="jumpbtn" onclick="jumpToday()">Jump to today</button></div>':''}`;
   let any = false;
-  CATS.forEach(cat=>{
-    const groupAll = list.filter(t=> (t.category||'work')===cat);
-    if(groupAll.length===0) return;
+  allCategories().forEach(cat=>{
+    const open = sortByOrder(list.filter(t=> (t.category||'work')===cat.key && !isDoneForDate(t, viewDate)));
+    if(open.length===0) return;
     any = true;
-    const open = sortByOrder(groupAll.filter(t=>!isDoneForDate(t, viewDate)));
-    const done = sortByOrder(groupAll.filter(t=>isDoneForDate(t, viewDate)));
-    html += `<div class="cathead cathead-${cat}">${CAT_LABELS[cat]}</div>`;
+    const hc = headCatAttrs(cat.key);
+    html += `<div class="cathead ${hc.cls}" style="${hc.style}">${escapeHtml(cat.label)}</div>`;
     open.forEach((t,i)=>{ html += diaryRowHtml(t, viewDate, i>0, i<open.length-1); });
-    done.forEach(t=>{ html += diaryRowHtml(t, viewDate, false, false); });
   });
+  const doneList = sortByOrder(list.filter(t=>isDoneForDate(t, viewDate)));
+  if(doneList.length>0){
+    any = true;
+    html += `<div class="cathead cathead-done">Completed</div>`;
+    doneList.forEach(t=>{ html += diaryRowHtml(t, viewDate, false, false); });
+  }
   if(!any) html += `<div class="empty">Nothing on for this day.</div>`;
   el.innerHTML = html;
 }
@@ -542,6 +651,8 @@ function renderTodayView(){
 
 function rowHtml(t, context, canUp, canDown){
   const q = quadKey(t);
+  const rc = rowCatAttrs(t.category||'work');
+  const tc = tagCatAttrs(t.category||'work');
   const metaParts = [];
   if(t.due) metaParts.push('Due ' + t.due);
   if(t.bucket==='recurring' && t.recurDays && t.recurDays.length){
@@ -554,13 +665,13 @@ function rowHtml(t, context, canUp, canDown){
         ${canUp?`<span class="act" onclick="moveTask('${t.id}','up','${context}')">&#8593;</span>`:''}
         ${canDown?`<span class="act" onclick="moveTask('${t.id}','down','${context}')">&#8595;</span>`:''}` : '';
   return `
-    <div class="listrow q-${quadClass(t)} cat-${t.category||'work'} ${t.done?'done':''}">
+    <div class="listrow q-${quadClass(t)} ${rc.cls} ${t.done?'done':''}" style="${rc.style}">
       <div class="chk" onclick="toggleDone(event,'${t.id}')">${t.done?'✓':''}</div>
       <div class="body">
         <div class="title">${escapeHtml(t.title)}</div>
         <div class="meta">
           <span class="tag ${q}">${quadLabel(q)}</span>
-          <span class="tag cat ${t.category||'work'}">${t.category||'work'}</span>
+          <span class="tag cat ${tc.cls}" style="${tc.style}">${escapeHtml(getCategory(t.category||'work').label)}</span>
           ${metaParts.map(m=>`<span>${m.startsWith('<')?m:escapeHtml(m)}</span>`).join('')}
         </div>
       </div>
@@ -580,8 +691,24 @@ function escapeHtml(s){
 
 function listForBucket(bucket){
   const cf = categoryFilter[bucket];
+  if(bucket==='week'){
+    const start = todayStr();
+    const endD = new Date();
+    endD.setDate(endD.getDate()+6);
+    const end = fmtLocalDate(endD);
+    return tasks.filter(t=> (t.bucket==='week' || (t.due && t.due>=start && t.due<=end))
+      && (cf==='all' || (t.category||'work')===cf));
+  }
   return tasks.filter(t=> t.bucket===bucket
     && (cf==='all' || (t.category||'work')===cf));
+}
+
+function weekTotalOpen(){
+  const start = todayStr();
+  const endD = new Date();
+  endD.setDate(endD.getDate()+6);
+  const end = fmtLocalDate(endD);
+  return tasks.filter(t=> !t.done && (t.bucket==='week' || (t.due && t.due>=start && t.due<=end))).length;
 }
 
 function setCatFilter(bucket, c){
@@ -590,9 +717,9 @@ function setCatFilter(bucket, c){
 }
 
 function catFilterHtml(bucket){
-  const cats = ['all','work','personal','issues'];
-  return `<div class="catfilter">` + cats.map(c=>
-    `<span class="catchip ${categoryFilter[bucket]===c?'on':''}" onclick="setCatFilter('${bucket}','${c}')">${c}</span>`
+  const opts = [{key:'all', label:'All'}, ...allCategories()];
+  return `<div class="catfilter">` + opts.map(c=>
+    `<span class="catchip ${categoryFilter[bucket]===c.key?'on':''}" onclick="setCatFilter('${bucket}','${c.key}')">${escapeHtml(c.label)}</span>`
   ).join('') + `</div>`;
 }
 
@@ -602,16 +729,20 @@ function renderBucketView(bucket){
   const context = `bucket:${bucket}`;
   let html = catFilterHtml(bucket);
   let any = false;
-  CATS.forEach(cat=>{
-    const groupAll = list.filter(t=> (t.category||'work')===cat);
-    if(groupAll.length===0) return;
+  allCategories().forEach(cat=>{
+    const open = sortByOrder(list.filter(t=> (t.category||'work')===cat.key && !t.done));
+    if(open.length===0) return;
     any = true;
-    const open = sortByOrder(groupAll.filter(t=>!t.done));
-    const done = sortByOrder(groupAll.filter(t=>t.done));
-    html += `<div class="cathead cathead-${cat}">${CAT_LABELS[cat]}</div>`;
+    const hc = headCatAttrs(cat.key);
+    html += `<div class="cathead ${hc.cls}" style="${hc.style}">${escapeHtml(cat.label)}</div>`;
     open.forEach((t,i)=>{ html += rowHtml(t, context, i>0, i<open.length-1); });
-    done.forEach(t=>{ html += rowHtml(t, context, false, false); });
   });
+  const doneList = sortByOrder(list.filter(t=>t.done));
+  if(doneList.length>0){
+    any = true;
+    html += `<div class="cathead cathead-done">Completed</div>`;
+    doneList.forEach(t=>{ html += rowHtml(t, context, false, false); });
+  }
   if(!any) html += `<div class="empty">Nothing here. Add a task above.</div>`;
   el.innerHTML = html;
 }
@@ -649,7 +780,7 @@ function renderMatrix(){
   const keys = matrixFilter ? [matrixFilter] : ['q1','q2','q3','q4'];
   let html = '';
   if(matrixFilter){
-    html += `<div class="showdone" onclick="clearMatrixFilter()">&larr; Show all quadrants</div>`;
+    html += `<div class="jumpbtn" style="display:inline-block;margin-bottom:12px;cursor:pointer;" onclick="clearMatrixFilter()">&larr; Show all quadrants</div>`;
   }
   html += '<div class="matrix">';
   keys.forEach(k=>{
@@ -676,12 +807,14 @@ function switchTab(view){
 }
 
 function renderCounts(){
-  ['inbox','today','week','recurring'].forEach(b=>{
-    const n = tasks.filter(t=>t.bucket===b && !t.done).length;
-    document.getElementById('cnt-'+b).textContent = n>0 ? n : '';
-  });
+  const todayN = tasksForDate(todayStr()).filter(t=>!isDoneForDate(t, todayStr())).length;
+  document.getElementById('cnt-today').textContent = todayN>0 ? todayN : '';
+  const weekN = weekTotalOpen();
+  document.getElementById('cnt-week').textContent = weekN>0 ? weekN : '';
+  const recN = tasks.filter(t=>t.bucket==='recurring' && !t.done).length;
+  document.getElementById('cnt-recurring').textContent = recN>0 ? recN : '';
   document.getElementById('statOpen').textContent = tasks.filter(t=>!t.done).length;
-  document.getElementById('statToday').textContent = tasksForDate(todayStr()).filter(t=>!isDoneForDate(t, todayStr())).length;
+  document.getElementById('statToday').textContent = todayN;
   document.getElementById('statUrgent').textContent = tasks.filter(t=>t.urgent && t.important && !t.done).length;
 }
 

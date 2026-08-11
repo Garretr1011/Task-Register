@@ -183,6 +183,11 @@ body{
 }
 .chip.on-urgent{background:var(--q1-soft); border-color:var(--q1); color:var(--q1);}
 .chip.on-important{background:var(--q2-soft); border-color:var(--q2); color:var(--q2);}
+.chip.addcat{
+  background:var(--bg);
+  border-style:dashed;
+  color:var(--ink-soft);
+}
 select, .quickadd input[type=date]{
   padding:8px 10px;
   border:1px solid var(--line-strong);
@@ -301,7 +306,7 @@ main{padding:20px; max-width:1100px; margin:0 auto;}
 .tag.cat{background:var(--line); color:var(--ink-soft);}
 .rolled{color:var(--q3); font-weight:600;}
 .catfilter{
-  display:flex; gap:6px;
+  display:flex; gap:6px; flex-wrap:wrap;
   margin-bottom:12px;
 }
 .catchip{
@@ -330,6 +335,7 @@ main{padding:20px; max-width:1100px; margin:0 auto;}
 .cathead-work{color:var(--catwork);}
 .cathead-personal{color:var(--catpersonal);}
 .cathead-issues{color:var(--catissues);}
+.cathead-done{color:var(--ink-soft);}
 .weekstrip{
   display:flex;
   align-items:center;
@@ -473,10 +479,19 @@ main{padding:20px; max-width:1100px; margin:0 auto;}
   font-size:14px;
   font-family:inherit;
 }
+.modal input[type=color]{
+  width:48px; height:36px;
+  padding:2px;
+  border:1px solid var(--line-strong);
+  border-radius:var(--radius);
+  cursor:pointer;
+  background:var(--surface);
+}
 .modal-row{
   display:flex;
   gap:8px;
   flex-wrap:wrap;
+  align-items:center;
 }
 .modal-row select{flex:1;}
 .modal-actions{

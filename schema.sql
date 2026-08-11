@@ -33,3 +33,27 @@ create policy "delete own tasks" on tasks
   for delete using (auth.uid() = user_id);
 
 create index if not exists tasks_user_id_idx on tasks(user_id);
+
+create table if not exists categories (
+  id text primary key,
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  label text not null,
+  color text not null,
+  created_at timestamptz not null default now()
+);
+
+alter table categories enable row level security;
+
+create policy "select own categories" on categories
+  for select using (auth.uid() = user_id);
+
+create policy "insert own categories" on categories
+  for insert with check (auth.uid() = user_id);
+
+create policy "update own categories" on categories
+  for update using (auth.uid() = user_id);
+
+create policy "delete own categories" on categories
+  for delete using (auth.uid() = user_id);
+
+create index if not exists categories_user_id_idx on categories(user_id);

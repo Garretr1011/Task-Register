@@ -46,16 +46,12 @@
     <div class="chip" id="chipUrgent" onclick="toggleChip('urgent')">Urgent</div>
     <div class="chip" id="chipImportant" onclick="toggleChip('important')">Important</div>
     <select id="qaBucket" onchange="onBucketChange()">
-      <option value="inbox">Inbox</option>
       <option value="today">Today</option>
       <option value="week">This Week</option>
       <option value="recurring">Recurring</option>
     </select>
-    <select id="qaCategory">
-      <option value="work">Work</option>
-      <option value="personal">Personal</option>
-      <option value="issues">Issues</option>
-    </select>
+    <select id="qaCategory"></select>
+    <div class="chip addcat" onclick="openCategoryModal()">+ Category</div>
     <div class="qa-due-group">
       <label class="qa-label" for="qaDue">Due Date</label>
       <input type="date" id="qaDue">
@@ -74,16 +70,14 @@
 </div>
 
 <div class="tabs">
-  <div class="tab active" data-view="inbox" onclick="switchTab('inbox')">Inbox <span class="count" id="cnt-inbox"></span></div>
-  <div class="tab" data-view="today" onclick="switchTab('today')">Today <span class="count" id="cnt-today"></span></div>
+  <div class="tab active" data-view="today" onclick="switchTab('today')">Today <span class="count" id="cnt-today"></span></div>
   <div class="tab" data-view="week" onclick="switchTab('week')">This Week <span class="count" id="cnt-week"></span></div>
   <div class="tab" data-view="recurring" onclick="switchTab('recurring')">Recurring <span class="count" id="cnt-recurring"></span></div>
   <div class="tab" data-view="matrix" onclick="clearMatrixFilter(); switchTab('matrix')">Matrix</div>
 </div>
 
 <main>
-  <div class="view active" id="view-inbox"></div>
-  <div class="view" id="view-today"></div>
+  <div class="view active" id="view-today"></div>
   <div class="view" id="view-week"></div>
   <div class="view" id="view-recurring"></div>
   <div class="view" id="view-matrix"></div>
@@ -99,16 +93,12 @@
     </div>
     <div class="modal-row">
       <select id="editBucket" onchange="onEditBucketChange()">
-        <option value="inbox">Inbox</option>
         <option value="today">Today</option>
         <option value="week">This Week</option>
         <option value="recurring">Recurring</option>
       </select>
-      <select id="editCategory">
-        <option value="work">Work</option>
-        <option value="personal">Personal</option>
-        <option value="issues">Issues</option>
-      </select>
+      <select id="editCategory"></select>
+      <div class="chip addcat" onclick="openCategoryModal()">+ Category</div>
     </div>
     <div class="modal-row">
       <input type="date" id="editDue">
@@ -140,6 +130,21 @@
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeMoveModal()">Cancel</button>
       <button class="btn-add" onclick="confirmMove()">Move</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="categoryModal">
+  <div class="modal">
+    <h3>New category</h3>
+    <input type="text" id="newCatName" placeholder="Category name">
+    <div class="modal-row">
+      <label class="qa-label" for="newCatColor">Colour</label>
+      <input type="color" id="newCatColor" value="#2B4C7E">
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeCategoryModal()">Cancel</button>
+      <button class="btn-add" onclick="saveNewCategory()">Save</button>
     </div>
   </div>
 </div>
