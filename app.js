@@ -158,6 +158,8 @@ async function showApp(){
   document.getElementById('appScreen').style.display = 'block';
   await loadCategories();
   refreshCategoryDropdowns();
+  await loadLeave();
+  renderLeaveView();
   loadTasks();
 }
 
@@ -319,6 +321,120 @@ async function rolloverTasks(){
 
 function uid(){ return 't' + Date.now() + Math.random().toString(36).slice(2,7); }
 
+/* ---------- Leave ---------- */
+
+let leaveEntries = [];
+
+async function loadLeave(){
+  try{
+    const { data, error } = await sb.from('leave_entries').select('*').order('start_date', { ascending:true });
+    if(error) throw error;
+    leaveEntries = (data||[]).map(r=>({ id:r.id, staffName:r.staff_name, startDate:r.start_date, endDate:r.end_date }));
+  }catch(e){
+    console.error('Load leave failed', e);
+    leaveEntries = [];
+  }
+}
+
+async function persistLeave(entry){
+  try{
+    const { error } = await sb.from('leave_entries').upsert({
+      id: entry.id, user_id: currentUser.id, staff_name: entry.staffName,
+      start_date: entry.startDate, end_date: entry.endDate
+    });
+    if(error) console.error('Save leave failed', error);
+  }catch(e){
+    console.error('Save leave failed', e);
+  }
+}
+
+async function removeLeaveRemote(id){
+  try{
+    const { error } = await sb.from('leave_entries').delete().eq('id', id);
+    if(error) console.error('Delete leave failed', error);
+  }catch(e){
+    console.error('Delete leave failed', e);
+  }
+}
+
+function fmtDateShort(dateStr){
+  return new Date(dateStr+'T00:00:00').toLocaleDateString('en-AU', {weekday:'short', day:'numeric', month:'short'});
+}
+
+function addLeave(){
+  const nameEl = document.getElementById('leaveStaffName');
+  const name = nameEl.value.trim();
+  const start = document.getElementById('leaveStart').value;
+  const end = document.getElementById('leaveEnd').value || start;
+  if(!name || !start) return;
+  const entry = { id: uid(), staffName: name, startDate: start, endDate: end };
+  leaveEntries.push(entry);
+  persistLeave(entry);
+  nameEl.value = '';
+  document.getElementById('leaveStart').value = '';
+  document.getElementById('leaveEnd').value = '';
+  renderLeaveView();
+  renderLeaveBanner();
+  if(activeTab==='today') renderTodayView();
+}
+
+function deleteLeave(id){
+  leaveEntries = leaveEntries.filter(l=>l.id!==id);
+  removeLeaveRemote(id);
+  renderLeaveView();
+  renderLeaveBanner();
+  if(activeTab==='today') renderTodayView();
+}
+
+function leaveOnDate(dateStr){
+  return leaveEntries.filter(l=> l.startDate<=dateStr && l.endDate>=dateStr);
+}
+
+function renderLeaveView(){
+  const el = document.getElementById('leaveListInner');
+  if(!el) return;
+  const today = todayStr();
+  const upcoming = [...leaveEntries]
+    .filter(l=> l.endDate>=today)
+    .sort((a,b)=> a.startDate.localeCompare(b.startDate));
+  if(upcoming.length===0){
+    el.innerHTML = `<div class="empty">No upcoming or current leave on record.</div>`;
+    return;
+  }
+  el.innerHTML = upcoming.map(l=>{
+    const active = l.startDate<=today && l.endDate>=today;
+    return `
+      <div class="leaverow ${active?'active':''}">
+        <div class="leaverow-body">
+          <div class="leaverow-name">${escapeHtml(l.staffName)}</div>
+          <div class="leaverow-dates">${fmtDateShort(l.startDate)} &rarr; ${fmtDateShort(l.endDate)} ${active?'<span class="tag q1">On leave now</span>':''}</div>
+        </div>
+        <span class="del" onclick="deleteLeave('${l.id}')">&times;</span>
+      </div>`;
+  }).join('');
+}
+
+function renderLeaveBanner(){
+  const el = document.getElementById('leaveBanner');
+  if(!el) return;
+  const today = todayStr();
+  const endD = new Date();
+  endD.setDate(endD.getDate()+7);
+  const end = fmtLocalDate(endD);
+  const upcoming = leaveEntries
+    .filter(l=> l.startDate>=today && l.startDate<=end)
+    .sort((a,b)=> a.startDate.localeCompare(b.startDate));
+  if(upcoming.length===0){
+    el.style.display = 'none';
+    el.innerHTML = '';
+    return;
+  }
+  el.style.display = 'flex';
+  el.innerHTML = '&#128197; Leave coming up: ' + upcoming.map(l=>
+    `${escapeHtml(l.staffName)} (from ${fmtDateShort(l.startDate)})`
+  ).join(', ');
+}
+
 let history = [];
 let historyIndex = -1;
 const MAX_HISTORY = 50;
@@ -445,6 +561,54 @@ function addTask(){
 document.getElementById('qaTitle').addEventListener('keydown', e=>{
   if(e.key==='Enter') addTask();
 });
+
+let recognition = null;
+let listening = false;
+
+function initSpeechRecognition(){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR) return null;
+  const r = new SR();
+  r.continuous = false;
+  r.interimResults = false;
+  r.lang = 'en-AU';
+  return r;
+}
+
+function toggleVoice(){
+  if(listening){
+    if(recognition) recognition.stop();
+    return;
+  }
+  if(!recognition){
+    recognition = initSpeechRecognition();
+  }
+  if(!recognition){
+    alert("Voice input isn't supported in this browser. Try Chrome or Edge.");
+    return;
+  }
+  const titleEl = document.getElementById('qaTitle');
+  const micBtn = document.getElementById('micBtn');
+  recognition.onstart = ()=>{
+    listening = true;
+    micBtn.classList.add('listening');
+  };
+  recognition.onresult = (evt)=>{
+    const transcript = evt.results[0][0].transcript;
+    titleEl.value = titleEl.value.trim() ? titleEl.value.trim() + ' ' + transcript : transcript;
+    titleEl.focus();
+  };
+  recognition.onerror = (evt)=>{
+    console.error('Speech recognition error', evt.error);
+    listening = false;
+    micBtn.classList.remove('listening');
+  };
+  recognition.onend = ()=>{
+    listening = false;
+    micBtn.classList.remove('listening');
+  };
+  recognition.start();
+}
 
 /* ---------- Complete / delete ---------- */
 
@@ -791,6 +955,10 @@ function renderTodayView(){
     </div>
     <div class="diarydate">${fmtDateHeading(viewDate)}${isToday?' <span class="todaybadge">Today</span>':''}</div>
     ${!isToday?'<div class="jumprow"><button class="jumpbtn" onclick="jumpToday()">Jump to today</button></div>':''}`;
+  const onLeave = leaveOnDate(viewDate);
+  if(onLeave.length>0){
+    html += `<div class="leavebanner-inline">&#127796; On leave: ${onLeave.map(l=>escapeHtml(l.staffName)).join(', ')}</div>`;
+  }
   let any = false;
   allCategories().forEach(cat=>{
     const open = sortByOrder(list.filter(t=> (t.category||'work')===cat.key && !isDoneForDate(t, viewDate)));
@@ -1024,6 +1192,7 @@ function renderCounts(){
   document.getElementById('statToday').textContent = todayN;
   document.getElementById('statUrgent').textContent = tasks.filter(t=>t.urgent && t.important && !t.done).length;
   renderWeekStats();
+  renderLeaveBanner();
 }
 
 function render(){
@@ -1032,6 +1201,8 @@ function render(){
     renderMatrix();
   }else if(activeTab==='today'){
     renderTodayView();
+  }else if(activeTab==='leave'){
+    renderLeaveView();
   }else{
     renderBucketView(activeTab);
   }

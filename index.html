@@ -51,9 +51,12 @@
   <div class="stat-chip"><span class="num" id="wsRate">0%</span><span class="lbl">Rate</span></div>
 </div>
 
+<div class="leavebanner" id="leaveBanner"></div>
+
 <div class="quickadd">
   <div class="qa-row1">
     <input type="text" id="qaTitle" placeholder="Add a task and hit enter...">
+    <button type="button" class="mic-btn" id="micBtn" onclick="toggleVoice()" title="Add by voice">&#127908;</button>
   </div>
   <div class="qa-row2">
     <div class="chip" id="chipUrgent" onclick="toggleChip('urgent')">Urgent</div>
@@ -86,6 +89,7 @@
   <div class="tab active" data-view="today" onclick="switchTab('today')">Today <span class="count" id="cnt-today"></span></div>
   <div class="tab" data-view="week" onclick="switchTab('week')">This Week <span class="count" id="cnt-week"></span></div>
   <div class="tab" data-view="recurring" onclick="switchTab('recurring')">Recurring <span class="count" id="cnt-recurring"></span></div>
+  <div class="tab" data-view="leave" onclick="switchTab('leave')">Leave</div>
   <div class="tab" data-view="matrix" onclick="clearMatrixFilter(); switchTab('matrix')">Matrix</div>
 </div>
 
@@ -93,6 +97,19 @@
   <div class="view active" id="view-today"></div>
   <div class="view" id="view-week"></div>
   <div class="view" id="view-recurring"></div>
+  <div class="view" id="view-leave">
+    <div class="leaveform">
+      <input type="text" id="leaveStaffName" placeholder="Staff name">
+      <div class="leave-daterow">
+        <label class="qa-label" for="leaveStart">Start</label>
+        <input type="date" id="leaveStart">
+        <label class="qa-label" for="leaveEnd">End</label>
+        <input type="date" id="leaveEnd">
+      </div>
+      <button class="btn-add" onclick="addLeave()">Add Leave</button>
+    </div>
+    <div id="leaveListInner"></div>
+  </div>
   <div class="view" id="view-matrix"></div>
 </main>
 

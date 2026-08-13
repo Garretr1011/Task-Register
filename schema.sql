@@ -58,3 +58,28 @@ create policy "delete own categories" on categories
   for delete using (auth.uid() = user_id);
 
 create index if not exists categories_user_id_idx on categories(user_id);
+
+create table if not exists leave_entries (
+  id text primary key,
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  staff_name text not null,
+  start_date date not null,
+  end_date date not null,
+  created_at timestamptz not null default now()
+);
+
+alter table leave_entries enable row level security;
+
+create policy "select own leave" on leave_entries
+  for select using (auth.uid() = user_id);
+
+create policy "insert own leave" on leave_entries
+  for insert with check (auth.uid() = user_id);
+
+create policy "update own leave" on leave_entries
+  for update using (auth.uid() = user_id);
+
+create policy "delete own leave" on leave_entries
+  for delete using (auth.uid() = user_id);
+
+create index if not exists leave_entries_user_id_idx on leave_entries(user_id);
