@@ -61,16 +61,15 @@ function updateClock(){
 updateClock();
 setInterval(updateClock, 1000);
 
-const BUILTIN_CATS = [
+let categories = [];
+const DEFAULT_CATS = [
   {key:'work', label:'Work', color:'#2B4C7E'},
   {key:'issues', label:'Issues', color:'#7A3FA0'},
   {key:'personal', label:'Personal', color:'#2F7D4F'}
 ];
-let customCategories = [];
 
-function allCategories(){ return [...BUILTIN_CATS, ...customCategories]; }
-function getCategory(key){ return allCategories().find(c=>c.key===key) || BUILTIN_CATS[0]; }
-function isBuiltinCat(key){ return BUILTIN_CATS.some(c=>c.key===key); }
+function allCategories(){ return categories; }
+function getCategory(key){ return categories.find(c=>c.key===key) || categories[0] || DEFAULT_CATS[0]; }
 
 function lightenHex(hex, amt){
   hex = hex.replace('#','');
@@ -84,17 +83,14 @@ function lightenHex(hex, amt){
 }
 
 function rowCatAttrs(catKey){
-  if(isBuiltinCat(catKey)) return {cls:`cat-${catKey}`, style:''};
   const c = getCategory(catKey);
   return {cls:'', style:`background:${lightenHex(c.color,0.82)};`};
 }
 function tagCatAttrs(catKey){
-  if(isBuiltinCat(catKey)) return {cls:catKey, style:''};
   const c = getCategory(catKey);
   return {cls:'', style:`background:${lightenHex(c.color,0.68)};color:${c.color};`};
 }
 function headCatAttrs(catKey){
-  if(isBuiltinCat(catKey)) return {cls:`cathead-${catKey}`, style:''};
   const c = getCategory(catKey);
   return {cls:'', style:`color:${c.color};`};
 }
@@ -110,25 +106,64 @@ function refreshCategoryDropdowns(){
   });
 }
 
+let editingCatKey = null;
+
 function openCategoryModal(){
-  document.getElementById('newCatName').value = '';
-  document.getElementById('newCatColor').value = '#2B4C7E';
+  resetCategoryForm();
+  renderCategoryModalList();
   document.getElementById('categoryModal').style.display = 'flex';
 }
 function closeCategoryModal(){
+  resetCategoryForm();
   document.getElementById('categoryModal').style.display = 'none';
 }
-function saveNewCategory(){
+
+function resetCategoryForm(){
+  editingCatKey = null;
+  document.getElementById('newCatName').value = '';
+  document.getElementById('newCatColor').value = '#2B4C7E';
+  document.getElementById('categorySaveBtn').textContent = 'Add';
+  document.getElementById('categoryModalTitle').textContent = 'Categories';
+}
+
+function renderCategoryModalList(){
+  const el = document.getElementById('categoryListInner');
+  if(!el) return;
+  el.innerHTML = categories.map(c=>`
+    <div class="catmanage-row">
+      <span class="catmanage-swatch" style="background:${c.color}"></span>
+      <span class="catmanage-name">${escapeHtml(c.label)}</span>
+      <span class="act" onclick="editCategoryStart('${c.key}')">&#9998;</span>
+    </div>`).join('');
+}
+
+function editCategoryStart(key){
+  const c = getCategory(key);
+  editingCatKey = key;
+  document.getElementById('newCatName').value = c.label;
+  document.getElementById('newCatColor').value = c.color;
+  document.getElementById('categorySaveBtn').textContent = 'Save changes';
+  document.getElementById('categoryModalTitle').textContent = 'Edit category';
+}
+
+function saveCategory(){
   const name = document.getElementById('newCatName').value.trim();
   if(!name) return;
   const color = document.getElementById('newCatColor').value;
-  const key = 'cat_' + Date.now();
-  const newCat = {key, label:name, color};
-  customCategories.push(newCat);
-  persistCategory(newCat);
+  let target;
+  if(editingCatKey){
+    target = categories.find(x=>x.key===editingCatKey);
+    if(target){ target.label = name; target.color = color; }
+  }else{
+    const key = 'cat_' + Date.now();
+    target = {key, label:name, color};
+    categories.push(target);
+    document.getElementById('qaCategory').value = key;
+  }
+  persistCategory(target);
   refreshCategoryDropdowns();
-  closeCategoryModal();
-  document.getElementById('qaCategory').value = key;
+  resetCategoryForm();
+  renderCategoryModalList();
   render();
 }
 
@@ -160,6 +195,8 @@ async function showApp(){
   refreshCategoryDropdowns();
   await loadLeave();
   renderLeaveView();
+  await loadShopping();
+  renderShoppingView();
   loadTasks();
 }
 
@@ -200,10 +237,14 @@ async function loadCategories(){
   try{
     const { data, error } = await sb.from('categories').select('*').order('created_at', { ascending:true });
     if(error) throw error;
-    customCategories = (data||[]).map(r=>({key:r.id, label:r.label, color:r.color}));
+    categories = (data||[]).map(r=>({key:r.id, label:r.label, color:r.color}));
   }catch(e){
     console.error('Load categories failed', e);
-    customCategories = [];
+    categories = [];
+  }
+  if(categories.length===0){
+    categories = DEFAULT_CATS.map(c=>({...c}));
+    for(const c of categories){ await persistCategory(c); }
   }
 }
 
@@ -435,6 +476,96 @@ function renderLeaveBanner(){
   ).join(', ');
 }
 
+/* ---------- Shopping list ---------- */
+
+let shoppingItems = [];
+
+async function loadShopping(){
+  try{
+    const { data, error } = await sb.from('shopping_items').select('*').order('created_at', { ascending:true });
+    if(error) throw error;
+    shoppingItems = (data||[]).map(r=>({
+      id: r.id, text: r.item_text, done: r.done,
+      createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now()
+    }));
+  }catch(e){
+    console.error('Load shopping failed', e);
+    shoppingItems = [];
+  }
+}
+
+async function persistShopItem(item){
+  try{
+    const { error } = await sb.from('shopping_items').upsert({
+      id: item.id, user_id: currentUser.id, item_text: item.text, done: !!item.done,
+      created_at: item.createdAt ? new Date(item.createdAt).toISOString() : new Date().toISOString()
+    });
+    if(error) console.error('Save shopping item failed', error);
+  }catch(e){
+    console.error('Save shopping item failed', e);
+  }
+}
+
+async function removeShopItemRemote(id){
+  try{
+    const { error } = await sb.from('shopping_items').delete().eq('id', id);
+    if(error) console.error('Delete shopping item failed', error);
+  }catch(e){
+    console.error('Delete shopping item failed', e);
+  }
+}
+
+function addShopItem(){
+  const el = document.getElementById('shopItemInput');
+  const text = el.value.trim();
+  if(!text) return;
+  const item = { id: uid(), text, done: false, createdAt: Date.now() };
+  shoppingItems.push(item);
+  persistShopItem(item);
+  el.value = '';
+  renderShoppingView();
+}
+
+function toggleShopItem(id){
+  const it = shoppingItems.find(x=>x.id===id);
+  if(it){
+    it.done = !it.done;
+    persistShopItem(it);
+  }
+  renderShoppingView();
+}
+
+function deleteShopItem(id){
+  shoppingItems = shoppingItems.filter(x=>x.id!==id);
+  removeShopItemRemote(id);
+  renderShoppingView();
+}
+
+function clearCompletedShopping(){
+  const toRemove = shoppingItems.filter(i=>i.done);
+  shoppingItems = shoppingItems.filter(i=>!i.done);
+  toRemove.forEach(i=> removeShopItemRemote(i.id));
+  renderShoppingView();
+}
+
+function renderShoppingView(){
+  const el = document.getElementById('shopListInner');
+  if(!el) return;
+  if(shoppingItems.length===0){
+    el.innerHTML = `<div class="empty">Nothing on the list. Add an item above.</div>`;
+    return;
+  }
+  const rowFn = (i)=>`
+    <div class="shoprow ${i.done?'done':''}">
+      <div class="chk" onclick="toggleShopItem('${i.id}')">${i.done?'✓':''}</div>
+      <div class="shoprow-text">${escapeHtml(i.text)}</div>
+      <span class="del" onclick="deleteShopItem('${i.id}')">&times;</span>
+    </div>`;
+  const open = shoppingItems.filter(i=>!i.done);
+  const done = shoppingItems.filter(i=>i.done);
+  el.innerHTML = open.map(rowFn).join('') + done.map(rowFn).join('');
+}
+
 let history = [];
 let historyIndex = -1;
 const MAX_HISTORY = 50;
@@ -560,6 +691,10 @@ function addTask(){
 
 document.getElementById('qaTitle').addEventListener('keydown', e=>{
   if(e.key==='Enter') addTask();
+});
+
+document.getElementById('shopItemInput').addEventListener('keydown', e=>{
+  if(e.key==='Enter') addShopItem();
 });
 
 let recognition = null;
@@ -1129,6 +1264,14 @@ function renderMatrix(){
 }
 
 /* ---------- Tabs / counts / render ---------- */
+
+function switchMode(mode){
+  document.getElementById('modeTasksBtn').classList.toggle('active', mode==='tasks');
+  document.getElementById('modeShoppingBtn').classList.toggle('active', mode==='shopping');
+  document.getElementById('tasksMode').style.display = mode==='tasks' ? '' : 'none';
+  document.getElementById('shoppingMode').style.display = mode==='shopping' ? '' : 'none';
+  if(mode==='shopping') renderShoppingView();
+}
 
 function switchTab(view){
   activeTab = view;

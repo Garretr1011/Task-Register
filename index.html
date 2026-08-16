@@ -23,6 +23,13 @@
 
 <div id="appScreen" style="display:none;">
 
+<div class="modeswitcher">
+  <button class="modebtn active" id="modeTasksBtn" onclick="switchMode('tasks')">Tasks</button>
+  <button class="modebtn" id="modeShoppingBtn" onclick="switchMode('shopping')">Shopping</button>
+</div>
+
+<div id="tasksMode">
+
 <div class="titleblock">
   <div class="tb-left">
     <div>
@@ -113,6 +120,23 @@
   <div class="view" id="view-matrix"></div>
 </main>
 
+</div>
+
+<div id="shoppingMode" style="display:none;">
+  <div class="shop-header">
+    <h1>Shopping List</h1>
+    <div class="sub">Personal</div>
+  </div>
+  <div class="shop-body">
+    <div class="shopform">
+      <input type="text" id="shopItemInput" placeholder="Add an item and hit enter...">
+      <button class="btn-add" onclick="addShopItem()">Add</button>
+    </div>
+    <div class="showdone" onclick="clearCompletedShopping()">Clear completed</div>
+    <div id="shopListInner"></div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="editModal">
   <div class="modal">
     <h3>Edit task</h3>
@@ -166,15 +190,17 @@
 
 <div class="modal-overlay" id="categoryModal">
   <div class="modal">
-    <h3>New category</h3>
+    <h3 id="categoryModalTitle">Categories</h3>
+    <div id="categoryListInner"></div>
+    <div class="modal-divider"></div>
     <input type="text" id="newCatName" placeholder="Category name">
     <div class="modal-row">
       <label class="qa-label" for="newCatColor">Colour</label>
       <input type="color" id="newCatColor" value="#2B4C7E">
     </div>
     <div class="modal-actions">
-      <button class="btn-cancel" onclick="closeCategoryModal()">Cancel</button>
-      <button class="btn-add" onclick="saveNewCategory()">Save</button>
+      <button class="btn-cancel" onclick="closeCategoryModal()">Close</button>
+      <button class="btn-add" id="categorySaveBtn" onclick="saveCategory()">Add</button>
     </div>
   </div>
 </div>

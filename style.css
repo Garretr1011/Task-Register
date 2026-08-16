@@ -28,6 +28,52 @@ body{
   font-family:'Inter',sans-serif;
   -webkit-font-smoothing:antialiased;
 }
+.modeswitcher{
+  display:flex;
+  background:var(--ink);
+  padding:6px 20px 0 20px;
+  gap:4px;
+}
+.modebtn{
+  padding:9px 20px;
+  background:transparent;
+  border:none;
+  border-bottom:3px solid transparent;
+  color:var(--on-dark-soft);
+  font-family:'Space Grotesk',sans-serif;
+  font-size:13px;
+  font-weight:600;
+  cursor:pointer;
+}
+.modebtn.active{
+  color:var(--on-dark);
+  border-bottom-color:var(--accent);
+}
+.modebtn:hover{color:var(--on-dark);}
+.shop-header{
+  background:var(--surface);
+  border-bottom:2px solid var(--line-strong);
+  padding:16px 20px;
+}
+.shop-header h1{
+  font-family:'Space Grotesk',sans-serif;
+  font-size:20px;
+  font-weight:700;
+  margin:0;
+  color:var(--ink);
+}
+.shop-header .sub{
+  font-size:11px;
+  color:var(--ink-soft);
+  text-transform:uppercase;
+  letter-spacing:0.08em;
+  margin-top:2px;
+}
+.shop-body{
+  max-width:600px;
+  margin:0 auto;
+  padding:20px;
+}
 
 /* ---- Auth screen ---- */
 .auth-wrap{
@@ -653,6 +699,52 @@ main{padding:20px; max-width:1100px; margin:0 auto;}
   align-items:center;
 }
 .modal-row select{flex:1;}
+.modal-divider{
+  height:1px;
+  background:var(--line);
+  margin:4px 0;
+}
+.catmanage-row{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:6px 2px;
+  border-bottom:1px solid var(--line);
+}
+.catmanage-row:last-child{border-bottom:none;}
+.catmanage-swatch{
+  width:14px; height:14px;
+  border-radius:50%;
+  flex-shrink:0;
+  border:1px solid rgba(0,0,0,0.15);
+}
+.catmanage-name{flex:1; font-size:13px;}
+.shopform{
+  display:flex;
+  gap:8px;
+  margin-bottom:12px;
+}
+.shopform input[type=text]{
+  flex:1;
+  padding:10px 12px;
+  border:1px solid var(--line-strong);
+  border-radius:var(--radius);
+  font-size:14px;
+  font-family:inherit;
+}
+.shoprow{
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  padding:10px 12px;
+  margin-bottom:8px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+.shoprow.done{opacity:0.45;}
+.shoprow.done .shoprow-text{text-decoration:line-through;}
+.shoprow-text{flex:1; font-size:14px;}
 .modal-actions{
   display:flex;
   justify-content:flex-end;

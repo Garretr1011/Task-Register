@@ -83,3 +83,27 @@ create policy "delete own leave" on leave_entries
   for delete using (auth.uid() = user_id);
 
 create index if not exists leave_entries_user_id_idx on leave_entries(user_id);
+
+create table if not exists shopping_items (
+  id text primary key,
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  item_text text not null,
+  done boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+alter table shopping_items enable row level security;
+
+create policy "select own shopping" on shopping_items
+  for select using (auth.uid() = user_id);
+
+create policy "insert own shopping" on shopping_items
+  for insert with check (auth.uid() = user_id);
+
+create policy "update own shopping" on shopping_items
+  for update using (auth.uid() = user_id);
+
+create policy "delete own shopping" on shopping_items
+  for delete using (auth.uid() = user_id);
+
+create index if not exists shopping_items_user_id_idx on shopping_items(user_id);
