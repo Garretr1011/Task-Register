@@ -88,7 +88,9 @@ create table if not exists shopping_items (
   id text primary key,
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
   item_text text not null,
+  category text not null default 'other',
   done boolean not null default false,
+  archived boolean not null default false,
   created_at timestamptz not null default now()
 );
 

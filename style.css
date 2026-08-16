@@ -54,6 +54,10 @@ body{
   background:var(--surface);
   border-bottom:2px solid var(--line-strong);
   padding:16px 20px;
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:16px;
 }
 .shop-header h1{
   font-family:'Space Grotesk',sans-serif;
@@ -68,6 +72,16 @@ body{
   text-transform:uppercase;
   letter-spacing:0.08em;
   margin-top:2px;
+}
+.shop-undoredo{
+  display:flex;
+  gap:6px;
+}
+.shop-undoredo .navbtn:disabled{opacity:0.3; cursor:not-allowed;}
+.shop-controls{
+  display:flex;
+  gap:16px;
+  margin-bottom:12px;
 }
 .shop-body{
   max-width:600px;
@@ -745,6 +759,7 @@ main{padding:20px; max-width:1100px; margin:0 auto;}
 .shoprow.done{opacity:0.45;}
 .shoprow.done .shoprow-text{text-decoration:line-through;}
 .shoprow-text{flex:1; font-size:14px;}
+.shoprow .actions{flex-shrink:0;}
 .modal-actions{
   display:flex;
   justify-content:flex-end;

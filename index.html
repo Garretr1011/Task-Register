@@ -124,16 +124,59 @@
 
 <div id="shoppingMode" style="display:none;">
   <div class="shop-header">
-    <h1>Shopping List</h1>
-    <div class="sub">Personal</div>
+    <div>
+      <h1>Shopping List</h1>
+      <div class="sub">Personal</div>
+    </div>
+    <div class="shop-undoredo">
+      <button class="navbtn" id="shopUndoBtn" onclick="shopUndo()" title="Undo">&#8630;</button>
+      <button class="navbtn" id="shopRedoBtn" onclick="shopRedo()" title="Redo">&#8631;</button>
+    </div>
   </div>
   <div class="shop-body">
     <div class="shopform">
       <input type="text" id="shopItemInput" placeholder="Add an item and hit enter...">
+      <select id="shopCategorySelect">
+        <option value="produce">Produce</option>
+        <option value="dairy">Dairy &amp; Eggs</option>
+        <option value="meat">Meat &amp; Seafood</option>
+        <option value="bakery">Bakery</option>
+        <option value="frozen">Frozen</option>
+        <option value="pantry">Pantry</option>
+        <option value="household">Household</option>
+        <option value="other" selected>Other</option>
+      </select>
       <button class="btn-add" onclick="addShopItem()">Add</button>
     </div>
-    <div class="showdone" onclick="clearCompletedShopping()">Clear completed</div>
+    <div class="shop-controls">
+      <span class="showdone" onclick="clearCompletedShopping()">Clear completed</span>
+      <span class="showdone" onclick="restoreAllShopping()">Restore all</span>
+    </div>
     <div id="shopListInner"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="shopEditModal">
+  <div class="modal">
+    <h3>Edit item</h3>
+    <input type="text" id="shopEditText" placeholder="Item">
+    <div class="modal-row">
+      <label class="qa-label" for="shopEditCategory">Category</label>
+      <select id="shopEditCategory">
+        <option value="produce">Produce</option>
+        <option value="dairy">Dairy &amp; Eggs</option>
+        <option value="meat">Meat &amp; Seafood</option>
+        <option value="bakery">Bakery</option>
+        <option value="frozen">Frozen</option>
+        <option value="pantry">Pantry</option>
+        <option value="household">Household</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeShopEditModal()">Cancel</button>
+      <button class="btn-add" onclick="saveShopEdit()">Save</button>
+    </div>
   </div>
 </div>
 

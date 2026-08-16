@@ -197,6 +197,7 @@ async function showApp(){
   renderLeaveView();
   await loadShopping();
   renderShoppingView();
+  shopInitHistory();
   loadTasks();
 }
 
@@ -478,6 +479,17 @@ function renderLeaveBanner(){
 
 /* ---------- Shopping list ---------- */
 
+const SHOP_CATS = [
+  {key:'produce', label:'Produce'},
+  {key:'dairy', label:'Dairy & Eggs'},
+  {key:'meat', label:'Meat & Seafood'},
+  {key:'bakery', label:'Bakery'},
+  {key:'frozen', label:'Frozen'},
+  {key:'pantry', label:'Pantry'},
+  {key:'household', label:'Household'},
+  {key:'other', label:'Other'}
+];
+
 let shoppingItems = [];
 
 async function loadShopping(){
@@ -485,7 +497,8 @@ async function loadShopping(){
     const { data, error } = await sb.from('shopping_items').select('*').order('created_at', { ascending:true });
     if(error) throw error;
     shoppingItems = (data||[]).map(r=>({
-      id: r.id, text: r.item_text, done: r.done,
+      id: r.id, text: r.item_text, category: r.category || 'other',
+      done: r.done, archived: r.archived || false,
       createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now()
     }));
   }catch(e){
@@ -497,7 +510,8 @@ async function loadShopping(){
 async function persistShopItem(item){
   try{
     const { error } = await sb.from('shopping_items').upsert({
-      id: item.id, user_id: currentUser.id, item_text: item.text, done: !!item.done,
+      id: item.id, user_id: currentUser.id, item_text: item.text,
+      category: item.category || 'other', done: !!item.done, archived: !!item.archived,
       created_at: item.createdAt ? new Date(item.createdAt).toISOString() : new Date().toISOString()
     });
     if(error) console.error('Save shopping item failed', error);
@@ -519,10 +533,12 @@ function addShopItem(){
   const el = document.getElementById('shopItemInput');
   const text = el.value.trim();
   if(!text) return;
-  const item = { id: uid(), text, done: false, createdAt: Date.now() };
+  const category = document.getElementById('shopCategorySelect').value;
+  const item = { id: uid(), text, category, done: false, archived: false, createdAt: Date.now() };
   shoppingItems.push(item);
   persistShopItem(item);
   el.value = '';
+  shopCommitHistory();
   renderShoppingView();
 }
 
@@ -532,38 +548,147 @@ function toggleShopItem(id){
     it.done = !it.done;
     persistShopItem(it);
   }
+  shopCommitHistory();
   renderShoppingView();
 }
 
 function deleteShopItem(id){
   shoppingItems = shoppingItems.filter(x=>x.id!==id);
   removeShopItemRemote(id);
+  shopCommitHistory();
   renderShoppingView();
 }
 
 function clearCompletedShopping(){
-  const toRemove = shoppingItems.filter(i=>i.done);
-  shoppingItems = shoppingItems.filter(i=>!i.done);
-  toRemove.forEach(i=> removeShopItemRemote(i.id));
+  const changed = shoppingItems.filter(i=>i.done);
+  changed.forEach(i=>{ i.archived = true; persistShopItem(i); });
+  shopCommitHistory();
   renderShoppingView();
+}
+
+function restoreAllShopping(){
+  shoppingItems.forEach(i=>{ i.archived = false; i.done = false; persistShopItem(i); });
+  shopCommitHistory();
+  renderShoppingView();
+}
+
+let editingShopId = null;
+
+function openShopEditModal(id){
+  const it = shoppingItems.find(x=>x.id===id);
+  if(!it) return;
+  editingShopId = id;
+  document.getElementById('shopEditText').value = it.text;
+  document.getElementById('shopEditCategory').value = it.category || 'other';
+  document.getElementById('shopEditModal').style.display = 'flex';
+}
+
+function closeShopEditModal(){
+  editingShopId = null;
+  document.getElementById('shopEditModal').style.display = 'none';
+}
+
+function saveShopEdit(){
+  const it = shoppingItems.find(x=>x.id===editingShopId);
+  if(!it) return;
+  const newText = document.getElementById('shopEditText').value.trim();
+  if(newText) it.text = newText;
+  it.category = document.getElementById('shopEditCategory').value;
+  closeShopEditModal();
+  persistShopItem(it);
+  shopCommitHistory();
+  renderShoppingView();
+}
+
+function shopRowHtml(i){
+  return `
+    <div class="shoprow ${i.done?'done':''}">
+      <div class="chk" onclick="toggleShopItem('${i.id}')">${i.done?'✓':''}</div>
+      <div class="shoprow-text">${escapeHtml(i.text)}</div>
+      <div class="actions">
+        <span class="act" onclick="openShopEditModal('${i.id}')">&#9998;</span>
+        <span class="act del" onclick="deleteShopItem('${i.id}')">&times;</span>
+      </div>
+    </div>`;
 }
 
 function renderShoppingView(){
   const el = document.getElementById('shopListInner');
   if(!el) return;
-  if(shoppingItems.length===0){
-    el.innerHTML = `<div class="empty">Nothing on the list. Add an item above.</div>`;
-    return;
+  const visible = shoppingItems.filter(i=>!i.archived);
+  let html = '';
+  let any = false;
+  SHOP_CATS.forEach(cat=>{
+    const open = visible.filter(i=> (i.category||'other')===cat.key && !i.done);
+    if(open.length===0) return;
+    any = true;
+    html += `<div class="cathead">${cat.label}</div>`;
+    html += open.map(shopRowHtml).join('');
+  });
+  const doneItems = visible.filter(i=>i.done);
+  if(doneItems.length>0){
+    any = true;
+    html += `<div class="cathead cathead-done">Completed</div>`;
+    html += doneItems.map(shopRowHtml).join('');
   }
-  const rowFn = (i)=>`
-    <div class="shoprow ${i.done?'done':''}">
-      <div class="chk" onclick="toggleShopItem('${i.id}')">${i.done?'✓':''}</div>
-      <div class="shoprow-text">${escapeHtml(i.text)}</div>
-      <span class="del" onclick="deleteShopItem('${i.id}')">&times;</span>
-    </div>`;
-  const open = shoppingItems.filter(i=>!i.done);
-  const done = shoppingItems.filter(i=>i.done);
-  el.innerHTML = open.map(rowFn).join('') + done.map(rowFn).join('');
+  if(!any) html = `<div class="empty">Nothing on the list. Add an item above.</div>`;
+  el.innerHTML = html;
+}
+
+let shopHistory = [];
+let shopHistoryIndex = -1;
+const SHOP_MAX_HISTORY = 50;
+
+function shopSnapshot(){
+  return JSON.parse(JSON.stringify(shoppingItems));
+}
+
+function shopInitHistory(){
+  shopHistory = [shopSnapshot()];
+  shopHistoryIndex = 0;
+  updateShopUndoRedoButtons();
+}
+
+function shopCommitHistory(){
+  shopHistory = shopHistory.slice(0, shopHistoryIndex+1);
+  shopHistory.push(shopSnapshot());
+  shopHistoryIndex = shopHistory.length - 1;
+  if(shopHistory.length > SHOP_MAX_HISTORY){
+    shopHistory.shift();
+    shopHistoryIndex--;
+  }
+  updateShopUndoRedoButtons();
+}
+
+function updateShopUndoRedoButtons(){
+  const u = document.getElementById('shopUndoBtn');
+  const r = document.getElementById('shopRedoBtn');
+  if(u) u.disabled = shopHistoryIndex <= 0;
+  if(r) r.disabled = shopHistoryIndex >= shopHistory.length - 1;
+}
+
+async function applyShopSnapshot(snapshot){
+  const oldIds = new Set(shoppingItems.map(i=>i.id));
+  const newIds = new Set(snapshot.map(i=>i.id));
+  const toDelete = [...oldIds].filter(id=>!newIds.has(id));
+  shoppingItems = JSON.parse(JSON.stringify(snapshot));
+  for(const id of toDelete){ await removeShopItemRemote(id); }
+  for(const i of shoppingItems){ await persistShopItem(i); }
+  renderShoppingView();
+}
+
+function shopUndo(){
+  if(shopHistoryIndex <= 0) return;
+  shopHistoryIndex--;
+  updateShopUndoRedoButtons();
+  applyShopSnapshot(shopHistory[shopHistoryIndex]);
+}
+
+function shopRedo(){
+  if(shopHistoryIndex >= shopHistory.length - 1) return;
+  shopHistoryIndex++;
+  updateShopUndoRedoButtons();
+  applyShopSnapshot(shopHistory[shopHistoryIndex]);
 }
 
 let history = [];
