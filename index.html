@@ -105,6 +105,7 @@
   <div class="tab active" data-view="today" onclick="switchTab('today')">Today <span class="count" id="cnt-today"></span></div>
   <div class="tab" data-view="week" onclick="switchTab('week')">This Week <span class="count" id="cnt-week"></span></div>
   <div class="tab" data-view="recurring" onclick="switchTab('recurring')">Recurring <span class="count" id="cnt-recurring"></span></div>
+  <div class="tab" data-view="habits" onclick="switchTab('habits')">Habits</div>
   <div class="tab" data-view="leave" onclick="switchTab('leave')">Leave</div>
   <div class="tab" data-view="matrix" onclick="clearMatrixFilter(); switchTab('matrix')">Matrix</div>
 </div>
@@ -113,6 +114,13 @@
   <div class="view active" id="view-today"></div>
   <div class="view" id="view-week"></div>
   <div class="view" id="view-recurring"></div>
+  <div class="view" id="view-habits">
+    <div class="habitform">
+      <input type="text" id="habitNameInput" placeholder="Add a habit and hit enter...">
+      <button class="btn-add" onclick="addHabit()">Add</button>
+    </div>
+    <div id="habitTableWrap"></div>
+  </div>
   <div class="view" id="view-leave">
     <div class="leaveform">
       <input type="text" id="leaveStaffName" placeholder="Staff name">
@@ -185,6 +193,17 @@
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeShopEditModal()">Cancel</button>
       <button class="btn-add" onclick="saveShopEdit()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="habitEditModal">
+  <div class="modal">
+    <h3>Edit habit</h3>
+    <input type="text" id="habitEditName" placeholder="Habit name">
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeHabitEditModal()">Cancel</button>
+      <button class="btn-add" onclick="saveHabitEdit()">Save</button>
     </div>
   </div>
 </div>

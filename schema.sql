@@ -109,3 +109,51 @@ create policy "delete own shopping" on shopping_items
   for delete using (auth.uid() = user_id);
 
 create index if not exists shopping_items_user_id_idx on shopping_items(user_id);
+
+create table if not exists habits (
+  id text primary key,
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  label text not null,
+  color text not null default '#2B4C7E',
+  created_at timestamptz not null default now()
+);
+
+alter table habits enable row level security;
+
+create policy "select own habits" on habits
+  for select using (auth.uid() = user_id);
+
+create policy "insert own habits" on habits
+  for insert with check (auth.uid() = user_id);
+
+create policy "update own habits" on habits
+  for update using (auth.uid() = user_id);
+
+create policy "delete own habits" on habits
+  for delete using (auth.uid() = user_id);
+
+create index if not exists habits_user_id_idx on habits(user_id);
+
+create table if not exists habit_log (
+  id text primary key,
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  habit_id text not null,
+  log_date date not null,
+  created_at timestamptz not null default now()
+);
+
+alter table habit_log enable row level security;
+
+create policy "select own habit log" on habit_log
+  for select using (auth.uid() = user_id);
+
+create policy "insert own habit log" on habit_log
+  for insert with check (auth.uid() = user_id);
+
+create policy "update own habit log" on habit_log
+  for update using (auth.uid() = user_id);
+
+create policy "delete own habit log" on habit_log
+  for delete using (auth.uid() = user_id);
+
+create index if not exists habit_log_user_id_idx on habit_log(user_id);

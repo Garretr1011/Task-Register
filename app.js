@@ -200,6 +200,9 @@ async function showApp(){
   await loadShopping();
   renderShoppingView();
   shopInitHistory();
+  await loadHabits();
+  await loadHabitLog();
+  renderHabitsView();
   loadTasks();
 }
 
@@ -477,6 +480,237 @@ function renderLeaveBanner(){
   el.innerHTML = '&#128197; Leave coming up: ' + upcoming.map(l=>
     `${escapeHtml(l.staffName)} (from ${fmtDateShort(l.startDate)})`
   ).join(', ');
+}
+
+/* ---------- Habits ---------- */
+
+const HABIT_PALETTE = ['#2F7D4F','#2B6CB0','#B03A2E','#A9662E','#1E88A8','#B7950B','#7A3FA0','#6B7280'];
+const DEFAULT_HABITS = [
+  '🌙 Sleep 7-8 hrs','🏋️ Gym session','🏃 Running','🥩 On-plan eating',
+  '👟 10k steps','💧 2L water','📵 Low phone use','🧘 Stretch / posture'
+];
+
+let habits = [];
+let habitLog = [];
+let habitWeekAnchor = null;
+
+async function loadHabits(){
+  try{
+    const { data, error } = await sb.from('habits').select('*').order('created_at', { ascending:true });
+    if(error) throw error;
+    habits = (data||[]).map(r=>({key:r.id, label:r.label, color:r.color}));
+  }catch(e){
+    console.error('Load habits failed', e);
+    habits = [];
+  }
+  if(habits.length===0){
+    habits = DEFAULT_HABITS.map((label,i)=>({key:uid(), label, color:HABIT_PALETTE[i % HABIT_PALETTE.length]}));
+    for(const h of habits){ await persistHabit(h); }
+  }
+}
+
+async function persistHabit(h){
+  try{
+    const { error } = await sb.from('habits').upsert({
+      id: h.key, user_id: currentUser.id, label: h.label, color: h.color
+    });
+    if(error) console.error('Save habit failed', error);
+  }catch(e){
+    console.error('Save habit failed', e);
+  }
+}
+
+async function removeHabitRemote(key){
+  try{
+    const { error } = await sb.from('habits').delete().eq('id', key);
+    if(error) console.error('Delete habit failed', error);
+  }catch(e){
+    console.error('Delete habit failed', e);
+  }
+}
+
+async function loadHabitLog(){
+  try{
+    const { data, error } = await sb.from('habit_log').select('*');
+    if(error) throw error;
+    habitLog = (data||[]).map(r=>({id:r.id, habitId:r.habit_id, date:r.log_date}));
+  }catch(e){
+    console.error('Load habit log failed', e);
+    habitLog = [];
+  }
+}
+
+async function persistHabitLogEntry(entry){
+  try{
+    const { error } = await sb.from('habit_log').upsert({
+      id: entry.id, user_id: currentUser.id, habit_id: entry.habitId, log_date: entry.date
+    });
+    if(error) console.error('Save habit log entry failed', error);
+  }catch(e){
+    console.error('Save habit log entry failed', e);
+  }
+}
+
+async function removeHabitLogEntryRemote(id){
+  try{
+    const { error } = await sb.from('habit_log').delete().eq('id', id);
+    if(error) console.error('Delete habit log entry failed', error);
+  }catch(e){
+    console.error('Delete habit log entry failed', e);
+  }
+}
+
+function addHabit(){
+  const el = document.getElementById('habitNameInput');
+  const text = el.value.trim();
+  if(!text) return;
+  const color = HABIT_PALETTE[habits.length % HABIT_PALETTE.length];
+  const h = {key: uid(), label: text, color};
+  habits.push(h);
+  el.value = '';
+  persistHabit(h);
+  renderHabitsView();
+}
+
+let editingHabitKey = null;
+
+function editHabitStart(key){
+  const h = habits.find(x=>x.key===key);
+  if(!h) return;
+  editingHabitKey = key;
+  document.getElementById('habitEditName').value = h.label;
+  document.getElementById('habitEditModal').style.display = 'flex';
+}
+
+function closeHabitEditModal(){
+  editingHabitKey = null;
+  document.getElementById('habitEditModal').style.display = 'none';
+}
+
+function saveHabitEdit(){
+  const h = habits.find(x=>x.key===editingHabitKey);
+  if(!h) return;
+  const newName = document.getElementById('habitEditName').value.trim();
+  if(newName) h.label = newName;
+  closeHabitEditModal();
+  persistHabit(h);
+  renderHabitsView();
+}
+
+function deleteHabit(key){
+  habits = habits.filter(h=>h.key!==key);
+  const toRemove = habitLog.filter(e=>e.habitId===key);
+  habitLog = habitLog.filter(e=>e.habitId!==key);
+  removeHabitRemote(key);
+  toRemove.forEach(e=> removeHabitLogEntryRemote(e.id));
+  renderHabitsView();
+}
+
+function habitWeekDates(anchor){
+  const d = new Date(anchor+'T00:00:00');
+  const dow = d.getDay();
+  const start = new Date(d);
+  start.setDate(d.getDate()-dow);
+  const days = [];
+  for(let i=0;i<7;i++){
+    const day = new Date(start);
+    day.setDate(start.getDate()+i);
+    days.push(fmtLocalDate(day));
+  }
+  return days;
+}
+
+function shiftHabitWeek(delta){
+  const d = new Date(habitWeekAnchor+'T00:00:00');
+  d.setDate(d.getDate()+7*delta);
+  habitWeekAnchor = fmtLocalDate(d);
+  renderHabitsView();
+}
+
+function jumpHabitWeekToday(){
+  habitWeekAnchor = todayStr();
+  renderHabitsView();
+}
+
+function habitDone(habitId, date){
+  return habitLog.some(e=>e.habitId===habitId && e.date===date);
+}
+
+function toggleHabitDay(habitId, date){
+  const idx = habitLog.findIndex(e=>e.habitId===habitId && e.date===date);
+  if(idx>=0){
+    const entry = habitLog[idx];
+    habitLog.splice(idx,1);
+    removeHabitLogEntryRemote(entry.id);
+  }else{
+    const entry = {id: habitId+'_'+date, habitId, date};
+    habitLog.push(entry);
+    persistHabitLogEntry(entry);
+  }
+  renderHabitsView();
+}
+
+function renderHabitsView(){
+  const el = document.getElementById('habitTableWrap');
+  if(!el) return;
+  if(!habitWeekAnchor) habitWeekAnchor = todayStr();
+  const weekDates = habitWeekDates(habitWeekAnchor);
+  const isCurrentWeek = weekDates.includes(todayStr());
+  const dayLabels = weekDates.map(d=>{
+    const dt = new Date(d+'T00:00:00');
+    return dt.toLocaleDateString('en-AU', {weekday:'short', day:'numeric'});
+  });
+
+  let html = `
+    <div class="habitweekhead">
+      <button class="navbtn" onclick="shiftHabitWeek(-1)">&larr;</button>
+      <div class="habitweeklabel">${fmtDateShort(weekDates[0])} &ndash; ${fmtDateShort(weekDates[6])}${isCurrentWeek?' <span class="todaybadge">This Week</span>':''}</div>
+      <button class="navbtn" onclick="shiftHabitWeek(1)">&rarr;</button>
+    </div>
+    ${!isCurrentWeek?'<div class="jumprow"><button class="jumpbtn" onclick="jumpHabitWeekToday()">Jump to this week</button></div>':''}`;
+
+  if(habits.length===0){
+    html += `<div class="empty">No habits yet. Add one above.</div>`;
+    el.innerHTML = html;
+    return;
+  }
+
+  html += `<div class="habit-table-wrap"><table class="habit-grid"><thead><tr><th></th>`;
+  dayLabels.forEach(l=>{ html += `<th>${l}</th>`; });
+  html += `<th>Score</th></tr></thead><tbody>`;
+
+  const scores = [];
+  habits.forEach(h=>{
+    html += `<tr><td class="habit-name">
+      <span class="habit-name-text">${escapeHtml(h.label)}</span>
+      <span class="actions"><span class="act" onclick="editHabitStart('${h.key}')">&#9998;</span><span class="act del" onclick="deleteHabit('${h.key}')">&times;</span></span>
+    </td>`;
+    let score = 0;
+    weekDates.forEach(d=>{
+      const done = habitDone(h.key, d);
+      if(done) score++;
+      const future = d > todayStr();
+      html += `<td><div class="habit-cell ${done?'done':''} ${future?'future':''}" ${future?'':`onclick="toggleHabitDay('${h.key}','${d}')"`} style="${done?`background:${h.color};border-color:${h.color};`:''}"></div></td>`;
+    });
+    html += `<td class="habit-score">${score}/7</td></tr>`;
+    scores.push({h, score});
+  });
+  html += `</tbody></table></div>`;
+
+  const totalPct = Math.round(scores.reduce((s,x)=>s+x.score,0) / (habits.length*7) * 100);
+  const grade = totalPct>=90?'S':totalPct>=80?'A':totalPct>=65?'B':totalPct>=45?'C':'D';
+  const sorted = [...scores].sort((a,b)=>a.score-b.score);
+  const worst = sorted[0];
+  const best = sorted[sorted.length-1];
+  html += `<div class="habit-summary">
+    <div class="habit-grade">${grade}<span class="habit-grade-pct">${totalPct}%</span></div>
+    <div class="habit-insight">
+      ${best?`<div><span class="up">&#8593; Strongest:</span> ${escapeHtml(best.h.label)} (${best.score}/7)</div>`:''}
+      ${worst && best && worst.h.key!==best.h.key?`<div><span class="down">&#8595; Focus area:</span> ${escapeHtml(worst.h.label)} (${worst.score}/7)</div>`:''}
+    </div>
+  </div>`;
+
+  el.innerHTML = html;
 }
 
 /* ---------- Shopping list ---------- */
@@ -828,6 +1062,10 @@ document.getElementById('qaTitle').addEventListener('keydown', e=>{
 
 document.getElementById('shopItemInput').addEventListener('keydown', e=>{
   if(e.key==='Enter') addShopItem();
+});
+
+document.getElementById('habitNameInput').addEventListener('keydown', e=>{
+  if(e.key==='Enter') addHabit();
 });
 
 document.getElementById('searchInput').addEventListener('input', e=>{
@@ -1522,6 +1760,8 @@ function render(){
     renderTodayView();
   }else if(activeTab==='leave'){
     renderLeaveView();
+  }else if(activeTab==='habits'){
+    renderHabitsView();
   }else{
     renderBucketView(activeTab);
   }
