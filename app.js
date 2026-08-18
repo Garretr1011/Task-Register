@@ -5,6 +5,8 @@ let tasks = [];
 let activeTab = 'today';
 let viewDate = null;
 let categoryFilter = {week:'all', recurring:'all'};
+let sortMode = {today:'manual', week:'manual', recurring:'manual'};
+let searchQuery = '';
 const DAY_LABELS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
 const QUOTES = [
@@ -480,14 +482,14 @@ function renderLeaveBanner(){
 /* ---------- Shopping list ---------- */
 
 const SHOP_CATS = [
-  {key:'produce', label:'Produce'},
-  {key:'dairy', label:'Dairy & Eggs'},
-  {key:'meat', label:'Meat & Seafood'},
-  {key:'bakery', label:'Bakery'},
-  {key:'frozen', label:'Frozen'},
-  {key:'pantry', label:'Pantry'},
-  {key:'household', label:'Household'},
-  {key:'other', label:'Other'}
+  {key:'produce', label:'Produce', color:'#2F7D4F'},
+  {key:'dairy', label:'Dairy & Eggs', color:'#2B6CB0'},
+  {key:'meat', label:'Meat & Seafood', color:'#B03A2E'},
+  {key:'bakery', label:'Bakery', color:'#A9662E'},
+  {key:'frozen', label:'Frozen', color:'#1E88A8'},
+  {key:'pantry', label:'Pantry', color:'#B7950B'},
+  {key:'household', label:'Household', color:'#7A3FA0'},
+  {key:'other', label:'Other', color:'#6B7280'}
 ];
 
 let shoppingItems = [];
@@ -600,9 +602,10 @@ function saveShopEdit(){
   renderShoppingView();
 }
 
-function shopRowHtml(i){
+function shopRowHtml(i, color){
+  const bg = color ? ` style="background:${lightenHex(color,0.85)};"` : '';
   return `
-    <div class="shoprow ${i.done?'done':''}">
+    <div class="shoprow ${i.done?'done':''}"${bg}>
       <div class="chk" onclick="toggleShopItem('${i.id}')">${i.done?'✓':''}</div>
       <div class="shoprow-text">${escapeHtml(i.text)}</div>
       <div class="actions">
@@ -616,21 +619,26 @@ function renderShoppingView(){
   const el = document.getElementById('shopListInner');
   if(!el) return;
   const visible = shoppingItems.filter(i=>!i.archived);
-  let html = '';
+  let html = '<div class="shop-grid">';
   let any = false;
   SHOP_CATS.forEach(cat=>{
     const open = visible.filter(i=> (i.category||'other')===cat.key && !i.done);
     if(open.length===0) return;
     any = true;
-    html += `<div class="cathead">${cat.label}</div>`;
-    html += open.map(shopRowHtml).join('');
+    html += `<div class="shop-col" style="border-top-color:${cat.color};">
+      <h3 style="color:${cat.color};">${escapeHtml(cat.label)}</h3>
+      ${open.map(i=>shopRowHtml(i, cat.color)).join('')}
+    </div>`;
   });
   const doneItems = visible.filter(i=>i.done);
   if(doneItems.length>0){
     any = true;
-    html += `<div class="cathead cathead-done">Completed</div>`;
-    html += doneItems.map(shopRowHtml).join('');
+    html += `<div class="shop-col shop-col-done">
+      <h3>Completed</h3>
+      ${doneItems.map(i=>shopRowHtml(i)).join('')}
+    </div>`;
   }
+  html += '</div>';
   if(!any) html = `<div class="empty">Nothing on the list. Add an item above.</div>`;
   el.innerHTML = html;
 }
@@ -821,6 +829,19 @@ document.getElementById('qaTitle').addEventListener('keydown', e=>{
 document.getElementById('shopItemInput').addEventListener('keydown', e=>{
   if(e.key==='Enter') addShopItem();
 });
+
+document.getElementById('searchInput').addEventListener('input', e=>{
+  searchQuery = e.target.value.trim().toLowerCase();
+  document.getElementById('searchClearBtn').style.display = searchQuery ? 'inline' : 'none';
+  render();
+});
+
+function clearSearch(){
+  searchQuery = '';
+  document.getElementById('searchInput').value = '';
+  document.getElementById('searchClearBtn').style.display = 'none';
+  render();
+}
 
 let recognition = null;
 let listening = false;
@@ -1180,7 +1201,7 @@ function diaryRowHtml(t, dateStr){
   if(t.bucket==='recurring') metaParts.push('Recurring');
   if(t.due && t.bucket!=='today') metaParts.push('Due ' + t.due);
   if(t.rollCount) metaParts.push(`<span class="rolled">Moved ${t.rollCount}x</span>`);
-  const draggable = !done;
+  const draggable = !done && sortMode['today']!=='alpha';
   const dragAttrs = draggable ? `ondragover="dragOverRow(event)" ondragenter="dragEnterRow(event)" ondragleave="dragLeaveRow(event)" ondrop="dropRow(event,'${t.id}','${context}')"` : '';
   const handle = draggable ? `<span class="draghandle" draggable="true" ondragstart="dragStart(event,'${t.id}','${context}')" ondragend="dragEnd(event)" title="Drag to reorder">&#8942;&#8942;</span>` : '<span class="draghandle-spacer"></span>';
   return `
@@ -1203,10 +1224,34 @@ function diaryRowHtml(t, dateStr){
     </div>`;
 }
 
+function sortKeyFromContext(context){
+  if(!context) return null;
+  if(context.startsWith('bucket:')) return context.slice(7);
+  if(context.startsWith('diary:')) return 'today';
+  return null;
+}
+
+function toggleSortMode(view){
+  sortMode[view] = (sortMode[view]==='alpha') ? 'manual' : 'alpha';
+  if(view==='today') renderTodayView(); else renderBucketView(view);
+}
+
+function matchesSearch(t){
+  if(!searchQuery) return true;
+  return (t.title||'').toLowerCase().includes(searchQuery);
+}
+
+function sortForView(view, list){
+  return sortMode[view]==='alpha'
+    ? [...list].sort((a,b)=> (a.title||'').localeCompare(b.title||''))
+    : sortByOrder(list);
+}
+
 function renderTodayView(){
   const el = document.getElementById('view-today');
   const isToday = viewDate === todayStr();
-  const list = tasksForDate(viewDate);
+  let list = tasksForDate(viewDate);
+  if(searchQuery) list = list.filter(matchesSearch);
   let html = `
     <div class="weekstrip">
       <button class="navbtn" onclick="shiftViewWeek(-1)">&larr;</button>
@@ -1219,9 +1264,10 @@ function renderTodayView(){
   if(onLeave.length>0){
     html += `<div class="leavebanner-inline">&#127796; On leave: ${onLeave.map(l=>escapeHtml(l.staffName)).join(', ')}</div>`;
   }
+  html += `<div class="catfilter"><span class="catchip sort-toggle ${sortMode['today']==='alpha'?'on':''}" onclick="toggleSortMode('today')" title="Sort A to Z">A&rarr;Z</span></div>`;
   let any = false;
   allCategories().forEach(cat=>{
-    const open = sortByOrder(list.filter(t=> (t.category||'work')===cat.key && !isDoneForDate(t, viewDate)));
+    const open = sortForView('today', list.filter(t=> (t.category||'work')===cat.key && !isDoneForDate(t, viewDate)));
     if(open.length===0) return;
     any = true;
     const hc = headCatAttrs(cat.key);
@@ -1252,7 +1298,7 @@ function rowHtml(t, context){
   if(t.rollCount){
     metaParts.push(`<span class="rolled">Moved ${t.rollCount}x</span>`);
   }
-  const draggable = context && !t.done;
+  const draggable = context && !t.done && sortMode[sortKeyFromContext(context)]!=='alpha';
   const dragAttrs = draggable ? `ondragover="dragOverRow(event)" ondragenter="dragEnterRow(event)" ondragleave="dragLeaveRow(event)" ondrop="dropRow(event,'${t.id}','${context}')"` : '';
   const handle = draggable ? `<span class="draghandle" draggable="true" ondragstart="dragStart(event,'${t.id}','${context}')" ondragend="dragEnd(event)" title="Drag to reorder">&#8942;&#8942;</span>` : '<span class="draghandle-spacer"></span>';
   return `
@@ -1310,19 +1356,23 @@ function setCatFilter(bucket, c){
 
 function catFilterHtml(bucket){
   const opts = [{key:'all', label:'All'}, ...allCategories()];
-  return `<div class="catfilter">` + opts.map(c=>
+  let html = `<div class="catfilter">` + opts.map(c=>
     `<span class="catchip ${categoryFilter[bucket]===c.key?'on':''}" onclick="setCatFilter('${bucket}','${c.key}')">${escapeHtml(c.label)}</span>`
-  ).join('') + `</div>`;
+  ).join('');
+  html += `<span class="catchip sort-toggle ${sortMode[bucket]==='alpha'?'on':''}" onclick="toggleSortMode('${bucket}')" title="Sort A to Z">A&rarr;Z</span>`;
+  html += `</div>`;
+  return html;
 }
 
 function renderBucketView(bucket){
   const el = document.getElementById('view-'+bucket);
-  const list = listForBucket(bucket);
+  let list = listForBucket(bucket);
+  if(searchQuery) list = list.filter(matchesSearch);
   const context = `bucket:${bucket}`;
   let html = catFilterHtml(bucket);
   let any = false;
   allCategories().forEach(cat=>{
-    const open = sortByOrder(list.filter(t=> (t.category||'work')===cat.key && !t.done));
+    const open = sortForView(bucket, list.filter(t=> (t.category||'work')===cat.key && !t.done));
     if(open.length===0) return;
     any = true;
     const hc = headCatAttrs(cat.key);
@@ -1360,7 +1410,8 @@ function clearMatrixFilter(){
 
 function renderMatrix(){
   const el = document.getElementById('view-matrix');
-  const open = tasks.filter(t=>!t.done);
+  let open = tasks.filter(t=>!t.done);
+  if(searchQuery) open = open.filter(matchesSearch);
   const groups = {q1:[], q2:[], q3:[], q4:[]};
   open.forEach(t=> groups[quadKey(t)].push(t));
   const labels = {
