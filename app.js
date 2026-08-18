@@ -1682,9 +1682,12 @@ function renderMatrix(){
 function switchMode(mode){
   document.getElementById('modeTasksBtn').classList.toggle('active', mode==='tasks');
   document.getElementById('modeShoppingBtn').classList.toggle('active', mode==='shopping');
+  document.getElementById('modeHabitsBtn').classList.toggle('active', mode==='habits');
   document.getElementById('tasksMode').style.display = mode==='tasks' ? '' : 'none';
   document.getElementById('shoppingMode').style.display = mode==='shopping' ? '' : 'none';
+  document.getElementById('habitsMode').style.display = mode==='habits' ? '' : 'none';
   if(mode==='shopping') renderShoppingView();
+  if(mode==='habits') renderHabitsView();
 }
 
 function switchTab(view){
@@ -1760,8 +1763,6 @@ function render(){
     renderTodayView();
   }else if(activeTab==='leave'){
     renderLeaveView();
-  }else if(activeTab==='habits'){
-    renderHabitsView();
   }else{
     renderBucketView(activeTab);
   }

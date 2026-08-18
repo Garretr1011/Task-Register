@@ -26,6 +26,7 @@
 <div class="modeswitcher">
   <button class="modebtn active" id="modeTasksBtn" onclick="switchMode('tasks')">Tasks</button>
   <button class="modebtn" id="modeShoppingBtn" onclick="switchMode('shopping')">Shopping</button>
+  <button class="modebtn" id="modeHabitsBtn" onclick="switchMode('habits')">Habits</button>
 </div>
 
 <div id="tasksMode">
@@ -105,7 +106,6 @@
   <div class="tab active" data-view="today" onclick="switchTab('today')">Today <span class="count" id="cnt-today"></span></div>
   <div class="tab" data-view="week" onclick="switchTab('week')">This Week <span class="count" id="cnt-week"></span></div>
   <div class="tab" data-view="recurring" onclick="switchTab('recurring')">Recurring <span class="count" id="cnt-recurring"></span></div>
-  <div class="tab" data-view="habits" onclick="switchTab('habits')">Habits</div>
   <div class="tab" data-view="leave" onclick="switchTab('leave')">Leave</div>
   <div class="tab" data-view="matrix" onclick="clearMatrixFilter(); switchTab('matrix')">Matrix</div>
 </div>
@@ -114,13 +114,6 @@
   <div class="view active" id="view-today"></div>
   <div class="view" id="view-week"></div>
   <div class="view" id="view-recurring"></div>
-  <div class="view" id="view-habits">
-    <div class="habitform">
-      <input type="text" id="habitNameInput" placeholder="Add a habit and hit enter...">
-      <button class="btn-add" onclick="addHabit()">Add</button>
-    </div>
-    <div id="habitTableWrap"></div>
-  </div>
   <div class="view" id="view-leave">
     <div class="leaveform">
       <input type="text" id="leaveStaffName" placeholder="Staff name">
@@ -170,6 +163,22 @@
       <span class="showdone" onclick="restoreAllShopping()">Restore all</span>
     </div>
     <div id="shopListInner"></div>
+  </div>
+</div>
+
+<div id="habitsMode" style="display:none;">
+  <div class="shop-header">
+    <div>
+      <h1>Habit Tracker</h1>
+      <div class="sub">Personal</div>
+    </div>
+  </div>
+  <div class="shop-body">
+    <div class="habitform">
+      <input type="text" id="habitNameInput" placeholder="Add a habit and hit enter...">
+      <button class="btn-add" onclick="addHabit()">Add</button>
+    </div>
+    <div id="habitTableWrap"></div>
   </div>
 </div>
 
