@@ -1910,10 +1910,10 @@ async function persistWeightEntry(w){
 }
 
 // Calls YOUR serverless function at /api/estimate — never Anthropic directly.
-async function estimateFood(text){
+async function estimateFood(text, image){
   const res = await fetch('/api/estimate', {
     method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({type:'food', text})
+    body: JSON.stringify({type:'food', text: text||'', image: image||null})
   });
   if(!res.ok){
     const err = await res.json().catch(()=>({}));
@@ -1937,14 +1937,14 @@ async function estimateExercise(text){
 async function logFood(){
   const el = document.getElementById('foodInput');
   const text = el.value.trim();
-  if(!text) return;
+  if(!text && !pendingFoodPhoto) return;
   const btn = document.getElementById('foodAddBtn');
   btn.disabled = true; btn.textContent = '...';
   try{
-    const result = await estimateFood(text);
+    const result = await estimateFood(text, pendingFoodPhoto);
     const entry = {
       id: uid(), date: todayStr(),
-      description: result.description || text,
+      description: result.description || text || 'Food photo',
       calories: Math.round(result.calories||0),
       protein: Math.round(result.protein||0),
       carbs: Math.round(result.carbs||0),
@@ -1959,7 +1959,7 @@ async function logFood(){
     renderHealthView();
   }catch(e){
     console.error(e);
-    alert("Couldn't estimate that food item. Try rephrasing and log again.");
+    alert("Couldn't estimate that food item. Try rephrasing/retaking the photo and log again.");
   }finally{
     btn.disabled = false; btn.textContent = 'Log';
   }

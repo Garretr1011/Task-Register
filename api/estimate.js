@@ -12,9 +12,17 @@ export default async function handler(req, res) {
     return;
   }
 
-  const { type, text } = req.body || {};
-  if (!text || !type || (type !== 'food' && type !== 'exercise')) {
-    res.status(400).json({ error: 'Expected { type: "food"|"exercise", text: string }' });
+  const { type, text, image } = req.body || {};
+  if (!type || (type !== 'food' && type !== 'exercise')) {
+    res.status(400).json({ error: 'Expected { type: "food"|"exercise", text?: string, image?: string }' });
+    return;
+  }
+  if (type === 'exercise' && !text) {
+    res.status(400).json({ error: 'Exercise entries need a text description' });
+    return;
+  }
+  if (type === 'food' && !text && !image) {
+    res.status(400).json({ error: 'Food entries need a description, a photo, or both' });
     return;
   }
 
@@ -24,10 +32,26 @@ export default async function handler(req, res) {
     return;
   }
 
-  const isFood = type === 'food';
-  const prompt = isFood
-    ? `Estimate nutrition facts for this food description: "${text}"\n\nRespond with ONLY a JSON object, no markdown formatting, no explanation, in this exact shape:\n{"description":"...", "calories":123, "protein":12, "carbs":34, "fat":5}\n\nNumbers are grams for protein/carbs/fat, calories as a whole number. Give your best realistic single estimate for a typical serving as described.`
-    : `Estimate calories burned for this exercise description: "${text}"\n\nRespond with ONLY a JSON object, no markdown formatting, no explanation, in this exact shape:\n{"description":"...", "caloriesBurned":250, "durationMinutes":30}\n\nIf duration isn't mentioned, make a reasonable estimate based on the activity described.`;
+  let content;
+
+  if (type === 'food' && image) {
+    const match = /^data:(image\/[a-zA-Z]+);base64,(.+)$/.exec(image);
+    if (!match) {
+      res.status(400).json({ error: 'Invalid image format' });
+      return;
+    }
+    const mediaType = match[1];
+    const base64Data = match[2];
+    const promptText = `Estimate nutrition facts for the food shown in this photo.${text ? ` Additional context from the user: "${text}"` : ''}\n\nRespond with ONLY a JSON object, no markdown formatting, no explanation, in this exact shape:\n{"description":"...", "calories":123, "protein":12, "carbs":34, "fat":5}\n\nNumbers are grams for protein/carbs/fat, calories as a whole number. Give your best realistic single estimate for what's shown in the photo.`;
+    content = [
+      { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64Data } },
+      { type: 'text', text: promptText }
+    ];
+  } else if (type === 'food') {
+    content = `Estimate nutrition facts for this food description: "${text}"\n\nRespond with ONLY a JSON object, no markdown formatting, no explanation, in this exact shape:\n{"description":"...", "calories":123, "protein":12, "carbs":34, "fat":5}\n\nNumbers are grams for protein/carbs/fat, calories as a whole number. Give your best realistic single estimate for a typical serving as described.`;
+  } else {
+    content = `Estimate calories burned for this exercise description: "${text}"\n\nRespond with ONLY a JSON object, no markdown formatting, no explanation, in this exact shape:\n{"description":"...", "caloriesBurned":250, "durationMinutes":30}\n\nIf duration isn't mentioned, make a reasonable estimate based on the activity described.`;
+  }
 
   try {
     const upstream = await fetch('https://api.anthropic.com/v1/messages', {
@@ -40,7 +64,7 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 300,
-        messages: [{ role: 'user', content: prompt }]
+        messages: [{ role: 'user', content }]
       })
     });
 
