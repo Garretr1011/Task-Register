@@ -203,6 +203,8 @@ async function showApp(){
   await loadHabits();
   await loadHabitLog();
   renderHabitsView();
+  await loadHealthLogs();
+  renderHealthView();
   loadTasks();
 }
 
@@ -1068,6 +1070,18 @@ document.getElementById('habitNameInput').addEventListener('keydown', e=>{
   if(e.key==='Enter') addHabit();
 });
 
+document.getElementById('foodInput').addEventListener('keydown', e=>{
+  if(e.key==='Enter') logFood();
+});
+
+document.getElementById('exerciseInput').addEventListener('keydown', e=>{
+  if(e.key==='Enter') logExercise();
+});
+
+document.getElementById('weightInput').addEventListener('keydown', e=>{
+  if(e.key==='Enter') logWeight();
+});
+
 document.getElementById('searchInput').addEventListener('input', e=>{
   searchQuery = e.target.value.trim().toLowerCase();
   document.getElementById('searchClearBtn').style.display = searchQuery ? 'inline' : 'none';
@@ -1683,11 +1697,14 @@ function switchMode(mode){
   document.getElementById('modeTasksBtn').classList.toggle('active', mode==='tasks');
   document.getElementById('modeShoppingBtn').classList.toggle('active', mode==='shopping');
   document.getElementById('modeHabitsBtn').classList.toggle('active', mode==='habits');
+  document.getElementById('modeHealthBtn').classList.toggle('active', mode==='health');
   document.getElementById('tasksMode').style.display = mode==='tasks' ? '' : 'none';
   document.getElementById('shoppingMode').style.display = mode==='shopping' ? '' : 'none';
   document.getElementById('habitsMode').style.display = mode==='habits' ? '' : 'none';
+  document.getElementById('healthMode').style.display = mode==='health' ? '' : 'none';
   if(mode==='shopping') renderShoppingView();
   if(mode==='habits') renderHabitsView();
+  if(mode==='health') renderHealthView();
 }
 
 function switchTab(view){
@@ -1765,6 +1782,255 @@ function render(){
     renderLeaveView();
   }else{
     renderBucketView(activeTab);
+  }
+}
+
+/* ---------- Health Log ---------- */
+
+const HEALTH_TARGETS = { calories:2100, protein:180, carbs:210, fat:60 };
+
+let foodLog = [];
+let exerciseLog = [];
+let weightLog = [];
+
+async function loadHealthLogs(){
+  try{
+    const [{data:fd,error:fe},{data:ed,error:ee},{data:wd,error:we}] = await Promise.all([
+      sb.from('food_log').select('*').order('created_at',{ascending:true}),
+      sb.from('exercise_log').select('*').order('created_at',{ascending:true}),
+      sb.from('weight_log').select('*').order('log_date',{ascending:true})
+    ]);
+    if(fe) throw fe; if(ee) throw ee; if(we) throw we;
+    foodLog = (fd||[]).map(r=>({id:r.id, date:r.log_date, description:r.description, calories:r.calories, protein:r.protein, carbs:r.carbs, fat:r.fat, createdAt: r.created_at?new Date(r.created_at).getTime():Date.now()}));
+    exerciseLog = (ed||[]).map(r=>({id:r.id, date:r.log_date, description:r.description, caloriesBurned:r.calories_burned, durationMinutes:r.duration_minutes, createdAt: r.created_at?new Date(r.created_at).getTime():Date.now()}));
+    weightLog = (wd||[]).map(r=>({id:r.id, date:r.log_date, weight:parseFloat(r.weight), createdAt: r.created_at?new Date(r.created_at).getTime():Date.now()}));
+  }catch(e){
+    console.error('Load health logs failed', e);
+    foodLog = []; exerciseLog = []; weightLog = [];
+  }
+}
+
+async function persistFoodEntry(f){
+  try{
+    const { error } = await sb.from('food_log').upsert({
+      id:f.id, user_id: currentUser.id, log_date:f.date, description:f.description,
+      calories:f.calories, protein:f.protein, carbs:f.carbs, fat:f.fat,
+      created_at: f.createdAt ? new Date(f.createdAt).toISOString() : new Date().toISOString()
+    });
+    if(error) console.error('Save food entry failed', error);
+  }catch(e){ console.error('Save food entry failed', e); }
+}
+
+async function removeFoodEntryRemote(id){
+  try{ const { error } = await sb.from('food_log').delete().eq('id', id); if(error) console.error(error); }
+  catch(e){ console.error(e); }
+}
+
+async function persistExerciseEntry(x){
+  try{
+    const { error } = await sb.from('exercise_log').upsert({
+      id:x.id, user_id: currentUser.id, log_date:x.date, description:x.description,
+      calories_burned:x.caloriesBurned, duration_minutes:x.durationMinutes||null,
+      created_at: x.createdAt ? new Date(x.createdAt).toISOString() : new Date().toISOString()
+    });
+    if(error) console.error('Save exercise entry failed', error);
+  }catch(e){ console.error('Save exercise entry failed', e); }
+}
+
+async function removeExerciseEntryRemote(id){
+  try{ const { error } = await sb.from('exercise_log').delete().eq('id', id); if(error) console.error(error); }
+  catch(e){ console.error(e); }
+}
+
+async function persistWeightEntry(w){
+  try{
+    const { error } = await sb.from('weight_log').upsert({
+      id:w.id, user_id: currentUser.id, log_date:w.date, weight:w.weight,
+      created_at: w.createdAt ? new Date(w.createdAt).toISOString() : new Date().toISOString()
+    });
+    if(error) console.error('Save weight entry failed', error);
+  }catch(e){ console.error('Save weight entry failed', e); }
+}
+
+// Calls YOUR serverless function at /api/estimate — never Anthropic directly.
+async function estimateFood(text){
+  const res = await fetch('/api/estimate', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({type:'food', text})
+  });
+  if(!res.ok){
+    const err = await res.json().catch(()=>({}));
+    throw new Error(err.error || 'Estimate failed');
+  }
+  return res.json();
+}
+
+async function estimateExercise(text){
+  const res = await fetch('/api/estimate', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({type:'exercise', text})
+  });
+  if(!res.ok){
+    const err = await res.json().catch(()=>({}));
+    throw new Error(err.error || 'Estimate failed');
+  }
+  return res.json();
+}
+
+async function logFood(){
+  const el = document.getElementById('foodInput');
+  const text = el.value.trim();
+  if(!text) return;
+  const btn = document.getElementById('foodAddBtn');
+  btn.disabled = true; btn.textContent = '...';
+  try{
+    const result = await estimateFood(text);
+    const entry = {
+      id: uid(), date: todayStr(),
+      description: result.description || text,
+      calories: Math.round(result.calories||0),
+      protein: Math.round(result.protein||0),
+      carbs: Math.round(result.carbs||0),
+      fat: Math.round(result.fat||0),
+      createdAt: Date.now()
+    };
+    foodLog.push(entry);
+    persistFoodEntry(entry);
+    el.value = '';
+    renderHealthView();
+  }catch(e){
+    console.error(e);
+    alert("Couldn't estimate that food item. Try rephrasing and log again.");
+  }finally{
+    btn.disabled = false; btn.textContent = 'Log';
+  }
+}
+
+async function logExercise(){
+  const el = document.getElementById('exerciseInput');
+  const text = el.value.trim();
+  if(!text) return;
+  const btn = document.getElementById('exerciseAddBtn');
+  btn.disabled = true; btn.textContent = '...';
+  try{
+    const result = await estimateExercise(text);
+    const entry = {
+      id: uid(), date: todayStr(),
+      description: result.description || text,
+      caloriesBurned: Math.round(result.caloriesBurned||0),
+      durationMinutes: result.durationMinutes ? Math.round(result.durationMinutes) : null,
+      createdAt: Date.now()
+    };
+    exerciseLog.push(entry);
+    persistExerciseEntry(entry);
+    el.value = '';
+    renderHealthView();
+  }catch(e){
+    console.error(e);
+    alert("Couldn't estimate that exercise entry. Try rephrasing and log again.");
+  }finally{
+    btn.disabled = false; btn.textContent = 'Log';
+  }
+}
+
+function logWeight(){
+  const el = document.getElementById('weightInput');
+  const val = parseFloat(el.value);
+  if(!val || isNaN(val)) return;
+  const today = todayStr();
+  let entry = weightLog.find(w=>w.date===today);
+  if(entry){
+    entry.weight = val;
+  }else{
+    entry = {id: uid(), date: today, weight: val, createdAt: Date.now()};
+    weightLog.push(entry);
+  }
+  persistWeightEntry(entry);
+  el.value = '';
+  renderHealthView();
+}
+
+function deleteFoodEntry(id){
+  foodLog = foodLog.filter(f=>f.id!==id);
+  removeFoodEntryRemote(id);
+  renderHealthView();
+}
+
+function deleteExerciseEntry(id){
+  exerciseLog = exerciseLog.filter(x=>x.id!==id);
+  removeExerciseEntryRemote(id);
+  renderHealthView();
+}
+
+function todayTotals(){
+  const today = todayStr();
+  const foods = foodLog.filter(f=>f.date===today);
+  const exs = exerciseLog.filter(x=>x.date===today);
+  const eaten = foods.reduce((s,f)=>s+f.calories,0);
+  const burned = exs.reduce((s,x)=>s+x.caloriesBurned,0);
+  const protein = foods.reduce((s,f)=>s+f.protein,0);
+  const carbs = foods.reduce((s,f)=>s+f.carbs,0);
+  const fat = foods.reduce((s,f)=>s+f.fat,0);
+  return {eaten, burned, net: eaten-burned, protein, carbs, fat};
+}
+
+function foodRowHtml(f){
+  return `<div class="health-row">
+    <div>
+      <div class="health-row-desc">${escapeHtml(f.description)}</div>
+      <div class="health-row-macros">${f.calories} cal &middot; P ${f.protein}g &middot; C ${f.carbs}g &middot; F ${f.fat}g</div>
+    </div>
+    <span class="del" onclick="deleteFoodEntry('${f.id}')">&times;</span>
+  </div>`;
+}
+
+function exerciseRowHtml(x){
+  return `<div class="health-row">
+    <div>
+      <div class="health-row-desc">${escapeHtml(x.description)}</div>
+      <div class="health-row-macros">${x.caloriesBurned} cal burned${x.durationMinutes?' &middot; '+x.durationMinutes+' min':''}</div>
+    </div>
+    <span class="del" onclick="deleteExerciseEntry('${x.id}')">&times;</span>
+  </div>`;
+}
+
+function renderHealthSummary(){
+  const el = document.getElementById('healthSummary');
+  if(!el) return;
+  const t = todayTotals();
+  const latest = [...weightLog].sort((a,b)=> b.date.localeCompare(a.date))[0];
+  const overCal = t.net > HEALTH_TARGETS.calories;
+  el.innerHTML = `
+    <div class="stat-chip"><span class="num">${t.eaten}</span><span class="lbl">Eaten</span></div>
+    <div class="stat-chip"><span class="num">${t.burned}</span><span class="lbl">Burned</span></div>
+    <div class="stat-chip ${overCal?'over':''}"><span class="num">${t.net}</span><span class="lbl">Net / ${HEALTH_TARGETS.calories}</span></div>
+    <div class="stat-chip"><span class="num">${t.protein}g</span><span class="lbl">Protein / ${HEALTH_TARGETS.protein}g</span></div>
+    <div class="stat-chip"><span class="num">${t.carbs}g</span><span class="lbl">Carbs / ${HEALTH_TARGETS.carbs}g</span></div>
+    <div class="stat-chip"><span class="num">${t.fat}g</span><span class="lbl">Fat / ${HEALTH_TARGETS.fat}g</span></div>
+    <div class="stat-chip"><span class="num">${latest?latest.weight:'—'}</span><span class="lbl">Weight${latest && latest.date!==todayStr() ? ' ('+fmtDateShort(latest.date)+')' : ''}</span></div>
+  `;
+}
+
+function renderHealthView(){
+  renderHealthSummary();
+  const today = todayStr();
+
+  const foodEl = document.getElementById('foodListInner');
+  if(foodEl){
+    const foods = foodLog.filter(f=>f.date===today);
+    foodEl.innerHTML = foods.length ? foods.map(foodRowHtml).join('') : '<div class="empty">No food logged today.</div>';
+  }
+
+  const exEl = document.getElementById('exerciseListInner');
+  if(exEl){
+    const exs = exerciseLog.filter(x=>x.date===today);
+    exEl.innerHTML = exs.length ? exs.map(exerciseRowHtml).join('') : '<div class="empty">No exercise logged today.</div>';
+  }
+
+  const weightNote = document.getElementById('weightNote');
+  if(weightNote){
+    const todayWeight = weightLog.find(w=>w.date===today);
+    weightNote.textContent = todayWeight ? `Logged today: ${todayWeight.weight}` : 'Not logged today';
   }
 }
 

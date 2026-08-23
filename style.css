@@ -1012,6 +1012,62 @@ table.habit-grid tr:last-child td{border-bottom:none;}
 .quad.q4 h3{border-color:var(--q4); color:var(--q4);}
 .quad .listrow{border-left-width:0; padding:8px 10px;}
 
+.health-statsbar{
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  margin-bottom:16px;
+  overflow-x:auto;
+}
+.stat-chip.over .num{color:var(--q1);}
+.health-entry-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));
+  gap:16px;
+}
+.health-entry-card{
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  padding:14px;
+}
+.health-entry-card h3{
+  font-family:'Space Grotesk',sans-serif;
+  font-size:13px;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:0.05em;
+  margin:0 0 10px 0;
+  padding-bottom:8px;
+  border-bottom:1px solid var(--line);
+}
+.health-form{
+  display:flex;
+  gap:8px;
+  margin-bottom:12px;
+}
+.health-form input{
+  flex:1;
+  padding:9px 12px;
+  border:1px solid var(--line-strong);
+  border-radius:var(--radius);
+  font-size:13px;
+  font-family:inherit;
+}
+.health-row{
+  background:var(--bg);
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  padding:8px 10px;
+  margin-bottom:8px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+}
+.health-row-desc{font-size:13px; font-weight:500;}
+.health-row-macros{font-size:11px; color:var(--ink-soft); margin-top:2px;}
+.health-weight-note{font-size:12px; color:var(--ink-soft);}
+
 @media (max-width:640px){
   .matrix{grid-template-columns:1fr;}
   .titleblock{flex-direction:column; align-items:flex-start;}

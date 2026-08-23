@@ -27,6 +27,7 @@
   <button class="modebtn active" id="modeTasksBtn" onclick="switchMode('tasks')">Tasks</button>
   <button class="modebtn" id="modeShoppingBtn" onclick="switchMode('shopping')">Shopping</button>
   <button class="modebtn" id="modeHabitsBtn" onclick="switchMode('habits')">Habits</button>
+  <button class="modebtn" id="modeHealthBtn" onclick="switchMode('health')">Health Log</button>
 </div>
 
 <div id="tasksMode">
@@ -179,6 +180,45 @@
       <button class="btn-add" onclick="addHabit()">Add</button>
     </div>
     <div id="habitTableWrap"></div>
+  </div>
+</div>
+
+<div id="healthMode" style="display:none;">
+  <div class="shop-header">
+    <div>
+      <h1>Health Log</h1>
+      <div class="sub">Personal</div>
+    </div>
+  </div>
+  <div class="shop-body">
+    <div class="statsbar health-statsbar" id="healthSummary"></div>
+
+    <div class="health-entry-grid">
+      <div class="health-entry-card">
+        <h3>Food</h3>
+        <div class="health-form">
+          <input type="text" id="foodInput" placeholder="e.g. grilled chicken salad">
+          <button class="btn-add" id="foodAddBtn" onclick="logFood()">Log</button>
+        </div>
+        <div id="foodListInner"></div>
+      </div>
+      <div class="health-entry-card">
+        <h3>Exercise</h3>
+        <div class="health-form">
+          <input type="text" id="exerciseInput" placeholder="e.g. 30 min run">
+          <button class="btn-add" id="exerciseAddBtn" onclick="logExercise()">Log</button>
+        </div>
+        <div id="exerciseListInner"></div>
+      </div>
+      <div class="health-entry-card">
+        <h3>Weight</h3>
+        <div class="health-form">
+          <input type="number" id="weightInput" placeholder="kg" step="0.1">
+          <button class="btn-add" onclick="logWeight()">Save</button>
+        </div>
+        <div class="health-weight-note" id="weightNote"></div>
+      </div>
+    </div>
   </div>
 </div>
 
