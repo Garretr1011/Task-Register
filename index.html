@@ -69,8 +69,6 @@
   <span class="searchclear" id="searchClearBtn" onclick="clearSearch()" style="display:none;">&times; Clear</span>
 </div>
 
-</div>
-
 <div class="quickadd">
   <div class="qa-row1">
     <input type="text" id="qaTitle" placeholder="Add a task and hit enter...">
@@ -101,6 +99,8 @@
     </div>
     <button class="btn-add" onclick="addTask()">Add</button>
   </div>
+</div>
+
 </div>
 
 <div class="tabs">
@@ -189,17 +189,25 @@
       <h1>Health Log</h1>
       <div class="sub">Personal</div>
     </div>
+    <button class="navbtn" onclick="openHealthSettingsModal()" title="Edit targets and goal">&#9881;</button>
   </div>
   <div class="shop-body">
     <div class="statsbar health-statsbar" id="healthSummary"></div>
+
+    <div class="weight-goal-card" id="weightGoalCard"></div>
+
+    <div class="daily-progress-card" id="dailyProgressCard"></div>
 
     <div class="health-entry-grid">
       <div class="health-entry-card">
         <h3>Food</h3>
         <div class="health-form">
           <input type="text" id="foodInput" placeholder="e.g. grilled chicken salad">
+          <label class="photo-btn" for="foodPhotoInput" title="Add photo">&#128247;</label>
+          <input type="file" id="foodPhotoInput" accept="image/*" style="display:none;">
           <button class="btn-add" id="foodAddBtn" onclick="logFood()">Log</button>
         </div>
+        <div id="foodPhotoPreview" class="food-photo-preview" style="display:none;"></div>
         <div id="foodListInner"></div>
       </div>
       <div class="health-entry-card">
@@ -220,6 +228,41 @@
       </div>
     </div>
   </div>
+</div>
+
+<div class="modal-overlay" id="healthSettingsModal">
+  <div class="modal">
+    <h3>Health Targets</h3>
+    <div class="modal-row">
+      <label class="qa-label" for="targetCalories">Calories</label>
+      <input type="number" id="targetCalories">
+    </div>
+    <div class="modal-row">
+      <label class="qa-label" for="targetProtein">Protein (g)</label>
+      <input type="number" id="targetProtein">
+    </div>
+    <div class="modal-row">
+      <label class="qa-label" for="targetCarbs">Carbs (g)</label>
+      <input type="number" id="targetCarbs">
+    </div>
+    <div class="modal-row">
+      <label class="qa-label" for="targetFat">Fat (g)</label>
+      <input type="number" id="targetFat">
+    </div>
+    <div class="modal-divider"></div>
+    <div class="modal-row">
+      <label class="qa-label" for="targetGoalWeight">Goal weight (kg)</label>
+      <input type="number" id="targetGoalWeight" step="0.1">
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeHealthSettingsModal()">Cancel</button>
+      <button class="btn-add" onclick="saveHealthSettingsForm()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="photoLightbox" onclick="closePhotoLightbox()">
+  <img id="lightboxImg" style="max-width:90vw;max-height:90vh;border-radius:8px;">
 </div>
 
 <div class="modal-overlay" id="shopEditModal">

@@ -4,7 +4,7 @@ let currentUser = null;
 let tasks = [];
 let activeTab = 'today';
 let viewDate = null;
-let categoryFilter = {week:'all', recurring:'all'};
+let categoryFilter = {today:'all', week:'all', recurring:'all'};
 let sortMode = {today:'manual', week:'manual', recurring:'manual'};
 let searchQuery = '';
 const DAY_LABELS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -203,6 +203,7 @@ async function showApp(){
   await loadHabits();
   await loadHabitLog();
   renderHabitsView();
+  await loadHealthSettings();
   await loadHealthLogs();
   renderHealthView();
   loadTasks();
@@ -1504,6 +1505,7 @@ function renderTodayView(){
   const isToday = viewDate === todayStr();
   let list = tasksForDate(viewDate);
   if(searchQuery) list = list.filter(matchesSearch);
+  if(categoryFilter.today && categoryFilter.today!=='all') list = list.filter(t=>(t.category||'work')===categoryFilter.today);
   let html = `
     <div class="weekstrip">
       <button class="navbtn" onclick="shiftViewWeek(-1)">&larr;</button>
@@ -1516,7 +1518,7 @@ function renderTodayView(){
   if(onLeave.length>0){
     html += `<div class="leavebanner-inline">&#127796; On leave: ${onLeave.map(l=>escapeHtml(l.staffName)).join(', ')}</div>`;
   }
-  html += `<div class="catfilter"><span class="catchip sort-toggle ${sortMode['today']==='alpha'?'on':''}" onclick="toggleSortMode('today')" title="Sort A to Z">A&rarr;Z</span></div>`;
+  html += catFilterHtml('today');
   let any = false;
   allCategories().forEach(cat=>{
     const open = sortForView('today', list.filter(t=> (t.category||'work')===cat.key && !isDoneForDate(t, viewDate)));
@@ -1603,7 +1605,7 @@ function weekTotalOpen(){
 
 function setCatFilter(bucket, c){
   categoryFilter[bucket] = c;
-  renderBucketView(bucket);
+  if(bucket==='today') renderTodayView(); else renderBucketView(bucket);
 }
 
 function catFilterHtml(bucket){
@@ -1787,7 +1789,62 @@ function render(){
 
 /* ---------- Health Log ---------- */
 
-const HEALTH_TARGETS = { calories:2100, protein:180, carbs:210, fat:60 };
+let healthSettings = { calories:2100, protein:180, carbs:210, fat:60, goalWeight:null };
+
+async function loadHealthSettings(){
+  try{
+    const { data, error } = await sb.from('health_settings').select('*').eq('user_id', currentUser.id).maybeSingle();
+    if(error) throw error;
+    if(data){
+      healthSettings = {
+        calories: data.calories, protein: data.protein, carbs: data.carbs, fat: data.fat,
+        goalWeight: data.goal_weight != null ? parseFloat(data.goal_weight) : null
+      };
+    }
+  }catch(e){
+    console.error('Load health settings failed', e);
+  }
+}
+
+async function saveHealthSettingsData(){
+  try{
+    const { error } = await sb.from('health_settings').upsert({
+      user_id: currentUser.id,
+      calories: healthSettings.calories, protein: healthSettings.protein,
+      carbs: healthSettings.carbs, fat: healthSettings.fat,
+      goal_weight: healthSettings.goalWeight,
+      updated_at: new Date().toISOString()
+    });
+    if(error) console.error('Save health settings failed', error);
+  }catch(e){
+    console.error('Save health settings failed', e);
+  }
+}
+
+function openHealthSettingsModal(){
+  document.getElementById('targetCalories').value = healthSettings.calories;
+  document.getElementById('targetProtein').value = healthSettings.protein;
+  document.getElementById('targetCarbs').value = healthSettings.carbs;
+  document.getElementById('targetFat').value = healthSettings.fat;
+  document.getElementById('targetGoalWeight').value = healthSettings.goalWeight != null ? healthSettings.goalWeight : '';
+  document.getElementById('healthSettingsModal').style.display = 'flex';
+}
+
+function closeHealthSettingsModal(){
+  document.getElementById('healthSettingsModal').style.display = 'none';
+}
+
+function saveHealthSettingsForm(){
+  healthSettings.calories = parseInt(document.getElementById('targetCalories').value) || healthSettings.calories;
+  healthSettings.protein = parseInt(document.getElementById('targetProtein').value) || healthSettings.protein;
+  healthSettings.carbs = parseInt(document.getElementById('targetCarbs').value) || healthSettings.carbs;
+  healthSettings.fat = parseInt(document.getElementById('targetFat').value) || healthSettings.fat;
+  const gw = parseFloat(document.getElementById('targetGoalWeight').value);
+  healthSettings.goalWeight = isNaN(gw) ? null : gw;
+  saveHealthSettingsData();
+  closeHealthSettingsModal();
+  renderHealthView();
+}
 
 let foodLog = [];
 let exerciseLog = [];
@@ -1801,7 +1858,7 @@ async function loadHealthLogs(){
       sb.from('weight_log').select('*').order('log_date',{ascending:true})
     ]);
     if(fe) throw fe; if(ee) throw ee; if(we) throw we;
-    foodLog = (fd||[]).map(r=>({id:r.id, date:r.log_date, description:r.description, calories:r.calories, protein:r.protein, carbs:r.carbs, fat:r.fat, createdAt: r.created_at?new Date(r.created_at).getTime():Date.now()}));
+    foodLog = (fd||[]).map(r=>({id:r.id, date:r.log_date, description:r.description, calories:r.calories, protein:r.protein, carbs:r.carbs, fat:r.fat, photoUrl:r.photo_url||null, createdAt: r.created_at?new Date(r.created_at).getTime():Date.now()}));
     exerciseLog = (ed||[]).map(r=>({id:r.id, date:r.log_date, description:r.description, caloriesBurned:r.calories_burned, durationMinutes:r.duration_minutes, createdAt: r.created_at?new Date(r.created_at).getTime():Date.now()}));
     weightLog = (wd||[]).map(r=>({id:r.id, date:r.log_date, weight:parseFloat(r.weight), createdAt: r.created_at?new Date(r.created_at).getTime():Date.now()}));
   }catch(e){
@@ -1814,7 +1871,7 @@ async function persistFoodEntry(f){
   try{
     const { error } = await sb.from('food_log').upsert({
       id:f.id, user_id: currentUser.id, log_date:f.date, description:f.description,
-      calories:f.calories, protein:f.protein, carbs:f.carbs, fat:f.fat,
+      calories:f.calories, protein:f.protein, carbs:f.carbs, fat:f.fat, photo_url:f.photoUrl||null,
       created_at: f.createdAt ? new Date(f.createdAt).toISOString() : new Date().toISOString()
     });
     if(error) console.error('Save food entry failed', error);
@@ -1892,11 +1949,13 @@ async function logFood(){
       protein: Math.round(result.protein||0),
       carbs: Math.round(result.carbs||0),
       fat: Math.round(result.fat||0),
+      photoUrl: pendingFoodPhoto,
       createdAt: Date.now()
     };
     foodLog.push(entry);
     persistFoodEntry(entry);
     el.value = '';
+    clearFoodPhoto();
     renderHealthView();
   }catch(e){
     console.error(e);
@@ -1975,7 +2034,9 @@ function todayTotals(){
 }
 
 function foodRowHtml(f){
+  const thumb = f.photoUrl ? `<img class="food-thumb" src="${f.photoUrl}" onclick="viewFoodPhoto('${f.id}')">` : '';
   return `<div class="health-row">
+    ${thumb}
     <div>
       <div class="health-row-desc">${escapeHtml(f.description)}</div>
       <div class="health-row-macros">${f.calories} cal &middot; P ${f.protein}g &middot; C ${f.carbs}g &middot; F ${f.fat}g</div>
@@ -1999,20 +2060,136 @@ function renderHealthSummary(){
   if(!el) return;
   const t = todayTotals();
   const latest = [...weightLog].sort((a,b)=> b.date.localeCompare(a.date))[0];
-  const overCal = t.net > HEALTH_TARGETS.calories;
+  const overCal = t.net > healthSettings.calories;
   el.innerHTML = `
     <div class="stat-chip"><span class="num">${t.eaten}</span><span class="lbl">Eaten</span></div>
     <div class="stat-chip"><span class="num">${t.burned}</span><span class="lbl">Burned</span></div>
-    <div class="stat-chip ${overCal?'over':''}"><span class="num">${t.net}</span><span class="lbl">Net / ${HEALTH_TARGETS.calories}</span></div>
-    <div class="stat-chip"><span class="num">${t.protein}g</span><span class="lbl">Protein / ${HEALTH_TARGETS.protein}g</span></div>
-    <div class="stat-chip"><span class="num">${t.carbs}g</span><span class="lbl">Carbs / ${HEALTH_TARGETS.carbs}g</span></div>
-    <div class="stat-chip"><span class="num">${t.fat}g</span><span class="lbl">Fat / ${HEALTH_TARGETS.fat}g</span></div>
+    <div class="stat-chip ${overCal?'over':''}"><span class="num">${t.net}</span><span class="lbl">Net / ${healthSettings.calories}</span></div>
+    <div class="stat-chip"><span class="num">${t.protein}g</span><span class="lbl">Protein / ${healthSettings.protein}g</span></div>
+    <div class="stat-chip"><span class="num">${t.carbs}g</span><span class="lbl">Carbs / ${healthSettings.carbs}g</span></div>
+    <div class="stat-chip"><span class="num">${t.fat}g</span><span class="lbl">Fat / ${healthSettings.fat}g</span></div>
     <div class="stat-chip"><span class="num">${latest?latest.weight:'—'}</span><span class="lbl">Weight${latest && latest.date!==todayStr() ? ' ('+fmtDateShort(latest.date)+')' : ''}</span></div>
   `;
 }
 
+function renderWeightGoalCard(){
+  const el = document.getElementById('weightGoalCard');
+  if(!el) return;
+  const sorted = [...weightLog].sort((a,b)=> a.date.localeCompare(b.date));
+  if(sorted.length===0 || healthSettings.goalWeight==null){
+    el.innerHTML = `<div class="weight-goal-empty">Log a weight and set a goal weight (&#9881; above) to see your progress here.</div>`;
+    return;
+  }
+  const start = sorted[0].weight;
+  const current = sorted[sorted.length-1].weight;
+  const goal = healthSettings.goalWeight;
+  const totalDelta = start - goal;
+  const progressDelta = start - current;
+  let pct = totalDelta !== 0 ? (progressDelta/totalDelta)*100 : 0;
+  pct = Math.max(0, Math.min(100, pct));
+  const remaining = Math.abs(current - goal);
+  const direction = goal < start ? 'lose' : 'gain';
+  const reached = (direction==='lose' && current<=goal) || (direction==='gain' && current>=goal);
+  const emoji = reached ? '🎉' : pct>=75 ? '🎯' : pct>=40 ? '💪' : '🚀';
+  el.innerHTML = `
+    <div class="weight-goal-top">
+      <div class="weight-goal-emoji">${emoji}</div>
+      <div class="weight-goal-stats">
+        <div class="wg-stat"><span class="wg-num">${start}</span><span class="wg-lbl">Start</span></div>
+        <div class="wg-stat current"><span class="wg-num">${current}</span><span class="wg-lbl">Current</span></div>
+        <div class="wg-stat"><span class="wg-num">${goal}</span><span class="wg-lbl">Goal</span></div>
+      </div>
+    </div>
+    <div class="weight-goal-bar"><div class="weight-goal-fill" style="width:${pct}%;"></div></div>
+    <div class="weight-goal-caption">${reached ? 'Goal reached! &#127881;' : `${remaining}kg to go &middot; ${Math.round(pct)}% of the way there`}</div>
+  `;
+}
+
+function progressBarRow(label, value, target, color){
+  const pct = target>0 ? Math.min(100, Math.round((value/target)*100)) : 0;
+  const over = value > target;
+  return `
+    <div class="progress-row">
+      <div class="progress-label"><span>${label}</span><span>${value} / ${target}${over?' &#9888;':''}</span></div>
+      <div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${over?'var(--q1)':color};"></div></div>
+    </div>`;
+}
+
+function renderDailyProgress(){
+  const el = document.getElementById('dailyProgressCard');
+  if(!el) return;
+  const t = todayTotals();
+  el.innerHTML = `
+    <h3>Today's Progress</h3>
+    ${progressBarRow('Net Calories', t.net, healthSettings.calories, 'var(--accent)')}
+    ${progressBarRow('Protein', t.protein, healthSettings.protein, 'var(--catwork)')}
+    ${progressBarRow('Carbs', t.carbs, healthSettings.carbs, 'var(--q3)')}
+    ${progressBarRow('Fat', t.fat, healthSettings.fat, 'var(--catissues)')}
+  `;
+}
+
+let pendingFoodPhoto = null;
+
+function resizeImageFile(file, maxWidth, quality){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = (e)=>{
+      const img = new Image();
+      img.onload = ()=>{
+        let w = img.width, h = img.height;
+        if(w > maxWidth){
+          h = Math.round(h * (maxWidth/w));
+          w = maxWidth;
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+document.getElementById('foodPhotoInput').addEventListener('change', async (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  try{
+    pendingFoodPhoto = await resizeImageFile(file, 500, 0.65);
+    const preview = document.getElementById('foodPhotoPreview');
+    preview.innerHTML = `<img src="${pendingFoodPhoto}"><span class="act del" onclick="clearFoodPhoto()">&times;</span>`;
+    preview.style.display = 'flex';
+  }catch(err){
+    console.error(err);
+  }
+});
+
+function clearFoodPhoto(){
+  pendingFoodPhoto = null;
+  document.getElementById('foodPhotoInput').value = '';
+  document.getElementById('foodPhotoPreview').style.display = 'none';
+  document.getElementById('foodPhotoPreview').innerHTML = '';
+}
+
+function viewFoodPhoto(id){
+  const f = foodLog.find(x=>x.id===id);
+  if(!f || !f.photoUrl) return;
+  document.getElementById('lightboxImg').src = f.photoUrl;
+  document.getElementById('photoLightbox').style.display = 'flex';
+}
+
+function closePhotoLightbox(){
+  document.getElementById('photoLightbox').style.display = 'none';
+}
+
 function renderHealthView(){
   renderHealthSummary();
+  renderWeightGoalCard();
+  renderDailyProgress();
   const today = todayStr();
 
   const foodEl = document.getElementById('foodListInner');
