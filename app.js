@@ -1083,6 +1083,10 @@ document.getElementById('weightInput').addEventListener('keydown', e=>{
   if(e.key==='Enter') logWeight();
 });
 
+document.getElementById('suggestInput').addEventListener('keydown', e=>{
+  if(e.key==='Enter') getSuggestion();
+});
+
 document.getElementById('searchInput').addEventListener('input', e=>{
   searchQuery = e.target.value.trim().toLowerCase();
   document.getElementById('searchClearBtn').style.display = searchQuery ? 'inline' : 'none';
@@ -1790,6 +1794,59 @@ function render(){
 /* ---------- Health Log ---------- */
 
 let healthSettings = { calories:2100, protein:180, carbs:210, fat:60, goalWeight:null };
+let healthViewDate = null;
+
+function shiftHealthWeek(delta){
+  const d = new Date(healthViewDate+'T00:00:00');
+  d.setDate(d.getDate()+7*delta);
+  healthViewDate = fmtLocalDate(d);
+  renderHealthView();
+}
+
+function selectHealthDay(dateStr){
+  healthViewDate = dateStr;
+  renderHealthView();
+}
+
+function jumpHealthToday(){
+  healthViewDate = todayStr();
+  renderHealthView();
+}
+
+function healthWeekStripHtml(viewDateStr){
+  const d = new Date(viewDateStr+'T00:00:00');
+  const dow = d.getDay();
+  const weekStart = new Date(d);
+  weekStart.setDate(d.getDate()-dow);
+  let html = '';
+  for(let i=0;i<7;i++){
+    const day = new Date(weekStart);
+    day.setDate(weekStart.getDate()+i);
+    const dateStr = fmtLocalDate(day);
+    const isSel = dateStr===viewDateStr;
+    const isTod = dateStr===todayStr();
+    html += `<button type="button" class="daybtn ${isSel?'sel':''} ${isTod && !isSel?'istoday':''}" onclick="selectHealthDay('${dateStr}')">
+        <span class="dbwd">${DAY_LABELS[i].slice(0,1)}</span>
+        <span class="dbnum">${day.getDate()}</span>
+      </button>`;
+  }
+  return html;
+}
+
+function renderHealthDateNav(){
+  const el = document.getElementById('healthDateNav');
+  if(!el) return;
+  const isToday = healthViewDate === todayStr();
+  el.innerHTML = `
+    <div class="weekstrip">
+      <button class="navbtn" onclick="shiftHealthWeek(-1)">&larr;</button>
+      <div class="weekdays">${healthWeekStripHtml(healthViewDate)}</div>
+      <button class="navbtn" onclick="shiftHealthWeek(1)">&rarr;</button>
+    </div>
+    <div class="diarydate">${fmtDateHeading(healthViewDate)}${isToday?' <span class="todaybadge">Today</span>':''}</div>
+    ${!isToday?'<div class="jumprow"><button class="jumpbtn" onclick="jumpHealthToday()">Jump to today</button></div>':''}
+  `;
+}
 
 async function loadHealthSettings(){
   try{
@@ -1943,7 +2000,7 @@ async function logFood(){
   try{
     const result = await estimateFood(text, pendingFoodPhoto);
     const entry = {
-      id: uid(), date: todayStr(),
+      id: uid(), date: healthViewDate,
       description: result.description || text || 'Food photo',
       calories: Math.round(result.calories||0),
       protein: Math.round(result.protein||0),
@@ -1974,7 +2031,7 @@ async function logExercise(){
   try{
     const result = await estimateExercise(text);
     const entry = {
-      id: uid(), date: todayStr(),
+      id: uid(), date: healthViewDate,
       description: result.description || text,
       caloriesBurned: Math.round(result.caloriesBurned||0),
       durationMinutes: result.durationMinutes ? Math.round(result.durationMinutes) : null,
@@ -1996,12 +2053,12 @@ function logWeight(){
   const el = document.getElementById('weightInput');
   const val = parseFloat(el.value);
   if(!val || isNaN(val)) return;
-  const today = todayStr();
-  let entry = weightLog.find(w=>w.date===today);
+  const day = healthViewDate;
+  let entry = weightLog.find(w=>w.date===day);
   if(entry){
     entry.weight = val;
   }else{
-    entry = {id: uid(), date: today, weight: val, createdAt: Date.now()};
+    entry = {id: uid(), date: day, weight: val, createdAt: Date.now()};
     weightLog.push(entry);
   }
   persistWeightEntry(entry);
@@ -2021,10 +2078,10 @@ function deleteExerciseEntry(id){
   renderHealthView();
 }
 
-function todayTotals(){
-  const today = todayStr();
-  const foods = foodLog.filter(f=>f.date===today);
-  const exs = exerciseLog.filter(x=>x.date===today);
+function todayTotals(dateStr){
+  const day = dateStr || todayStr();
+  const foods = foodLog.filter(f=>f.date===day);
+  const exs = exerciseLog.filter(x=>x.date===day);
   const eaten = foods.reduce((s,f)=>s+f.calories,0);
   const burned = exs.reduce((s,x)=>s+x.caloriesBurned,0);
   const protein = foods.reduce((s,f)=>s+f.protein,0);
@@ -2041,7 +2098,10 @@ function foodRowHtml(f){
       <div class="health-row-desc">${escapeHtml(f.description)}</div>
       <div class="health-row-macros">${f.calories} cal &middot; P ${f.protein}g &middot; C ${f.carbs}g &middot; F ${f.fat}g</div>
     </div>
-    <span class="del" onclick="deleteFoodEntry('${f.id}')">&times;</span>
+    <div class="actions">
+      <span class="act" onclick="repeatFoodEntry('${f.id}')" title="Repeat to this day">&#8635;</span>
+      <span class="act del" onclick="deleteFoodEntry('${f.id}')">&times;</span>
+    </div>
   </div>`;
 }
 
@@ -2051,14 +2111,17 @@ function exerciseRowHtml(x){
       <div class="health-row-desc">${escapeHtml(x.description)}</div>
       <div class="health-row-macros">${x.caloriesBurned} cal burned${x.durationMinutes?' &middot; '+x.durationMinutes+' min':''}</div>
     </div>
-    <span class="del" onclick="deleteExerciseEntry('${x.id}')">&times;</span>
+    <div class="actions">
+      <span class="act" onclick="repeatExerciseEntry('${x.id}')" title="Repeat to this day">&#8635;</span>
+      <span class="act del" onclick="deleteExerciseEntry('${x.id}')">&times;</span>
+    </div>
   </div>`;
 }
 
 function renderHealthSummary(){
   const el = document.getElementById('healthSummary');
   if(!el) return;
-  const t = todayTotals();
+  const t = todayTotals(healthViewDate);
   const latest = [...weightLog].sort((a,b)=> b.date.localeCompare(a.date))[0];
   const overCal = t.net > healthSettings.calories;
   el.innerHTML = `
@@ -2087,7 +2150,7 @@ function renderWeightGoalCard(){
   const progressDelta = start - current;
   let pct = totalDelta !== 0 ? (progressDelta/totalDelta)*100 : 0;
   pct = Math.max(0, Math.min(100, pct));
-  const remaining = Math.abs(current - goal);
+  const remaining = Math.round(Math.abs(current - goal) * 10) / 10;
   const direction = goal < start ? 'lose' : 'gain';
   const reached = (direction==='lose' && current<=goal) || (direction==='gain' && current>=goal);
   const emoji = reached ? '🎉' : pct>=75 ? '🎯' : pct>=40 ? '💪' : '🚀';
@@ -2102,7 +2165,52 @@ function renderWeightGoalCard(){
     </div>
     <div class="weight-goal-bar"><div class="weight-goal-fill" style="width:${pct}%;"></div></div>
     <div class="weight-goal-caption">${reached ? 'Goal reached! &#127881;' : `${remaining}kg to go &middot; ${Math.round(pct)}% of the way there`}</div>
+    <div class="weight-chart-toggle" onclick="toggleWeightChart()">${weightChartOpen ? '&#9650; Hide progress chart' : '&#9660; View progress chart'}</div>
+    ${weightChartOpen ? `<div class="weight-chart-wrap">${buildWeightChartSvg(sorted, goal)}</div>` : ''}
   `;
+}
+
+let weightChartOpen = false;
+
+function toggleWeightChart(){
+  weightChartOpen = !weightChartOpen;
+  renderWeightGoalCard();
+}
+
+function buildWeightChartSvg(data, goal){
+  const w = 600, h = 180, padL = 36, padR = 12, padT = 12, padB = 24;
+  const weights = data.map(d=>d.weight);
+  let minW = Math.min(...weights);
+  let maxW = Math.max(...weights);
+  if(goal!=null){ minW = Math.min(minW, goal); maxW = Math.max(maxW, goal); }
+  if(minW === maxW){ minW -= 1; maxW += 1; }
+  const pad = (maxW-minW)*0.1;
+  minW -= pad; maxW += pad;
+
+  const xStep = data.length>1 ? (w-padL-padR)/(data.length-1) : 0;
+  const xAt = i => padL + i*xStep;
+  const yAt = val => padT + (h-padT-padB) * (1 - (val-minW)/(maxW-minW));
+
+  const points = data.map((d,i)=> `${xAt(i)},${yAt(d.weight)}`).join(' ');
+
+  let goalLine = '';
+  if(goal!=null){
+    const gy = yAt(goal);
+    goalLine = `<line x1="${padL}" y1="${gy}" x2="${w-padR}" y2="${gy}" stroke="var(--catpersonal)" stroke-width="1.5" stroke-dasharray="4,3"/>
+      <text x="${w-padR}" y="${gy-4}" font-size="9" fill="var(--catpersonal)" text-anchor="end">Goal ${goal}</text>`;
+  }
+
+  const dots = data.map((d,i)=> `<circle cx="${xAt(i)}" cy="${yAt(d.weight)}" r="3" fill="var(--accent)"/>`).join('');
+  const firstLabel = data.length ? fmtDateShort(data[0].date) : '';
+  const lastLabel = data.length>1 ? fmtDateShort(data[data.length-1].date) : '';
+
+  return `<svg viewBox="0 0 ${w} ${h}" class="weight-chart-svg">
+    <polyline points="${points}" fill="none" stroke="var(--accent)" stroke-width="2"/>
+    ${goalLine}
+    ${dots}
+    <text x="${padL}" y="${h-6}" font-size="9" fill="var(--ink-soft)">${firstLabel}</text>
+    <text x="${w-padR}" y="${h-6}" font-size="9" fill="var(--ink-soft)" text-anchor="end">${lastLabel}</text>
+  </svg>`;
 }
 
 function progressBarRow(label, value, target, color){
@@ -2118,9 +2226,10 @@ function progressBarRow(label, value, target, color){
 function renderDailyProgress(){
   const el = document.getElementById('dailyProgressCard');
   if(!el) return;
-  const t = todayTotals();
+  const t = todayTotals(healthViewDate);
+  const isToday = healthViewDate === todayStr();
   el.innerHTML = `
-    <h3>Today's Progress</h3>
+    <h3>${isToday ? "Today's" : "Day's"} Progress</h3>
     ${progressBarRow('Net Calories', t.net, healthSettings.calories, 'var(--accent)')}
     ${progressBarRow('Protein', t.protein, healthSettings.protein, 'var(--catwork)')}
     ${progressBarRow('Carbs', t.carbs, healthSettings.carbs, 'var(--q3)')}
@@ -2186,28 +2295,186 @@ function closePhotoLightbox(){
   document.getElementById('photoLightbox').style.display = 'none';
 }
 
+function repeatFoodEntry(id){
+  const src = foodLog.find(f=>f.id===id);
+  if(!src) return;
+  const entry = {
+    id: uid(), date: healthViewDate,
+    description: src.description,
+    calories: src.calories, protein: src.protein, carbs: src.carbs, fat: src.fat,
+    photoUrl: src.photoUrl || null,
+    createdAt: Date.now()
+  };
+  foodLog.push(entry);
+  persistFoodEntry(entry);
+  renderHealthView();
+}
+
+function repeatExerciseEntry(id){
+  const src = exerciseLog.find(x=>x.id===id);
+  if(!src) return;
+  const entry = {
+    id: uid(), date: healthViewDate,
+    description: src.description,
+    caloriesBurned: src.caloriesBurned, durationMinutes: src.durationMinutes,
+    createdAt: Date.now()
+  };
+  exerciseLog.push(entry);
+  persistExerciseEntry(entry);
+  renderHealthView();
+}
+
+function recentFoodOptions(){
+  const seen = new Set();
+  const list = [];
+  [...foodLog].sort((a,b)=> b.createdAt - a.createdAt).forEach(f=>{
+    const key = f.description.toLowerCase();
+    if(!seen.has(key)){
+      seen.add(key);
+      list.push(f);
+    }
+  });
+  return list.slice(0, 8);
+}
+
+function renderRecentFoodChips(){
+  const el = document.getElementById('recentFoodChips');
+  if(!el) return;
+  const recents = recentFoodOptions();
+  if(recents.length===0){ el.innerHTML=''; return; }
+  el.innerHTML = `<div class="recent-chips-label">Recent:</div>` + recents.map(f=>
+    `<span class="catchip" onclick="repeatFoodEntry('${f.id}')" title="${f.calories} cal &middot; P${f.protein} C${f.carbs} F${f.fat}">${escapeHtml(f.description)}</span>`
+  ).join('');
+}
+
+function weekRangeDates(anchorDateStr){
+  const d = new Date(anchorDateStr+'T00:00:00');
+  const dow = d.getDay();
+  const start = new Date(d);
+  start.setDate(d.getDate()-dow);
+  const days = [];
+  for(let i=0;i<7;i++){
+    const day = new Date(start);
+    day.setDate(start.getDate()+i);
+    days.push(fmtLocalDate(day));
+  }
+  return days;
+}
+
+function weekTotals(anchorDateStr){
+  const days = weekRangeDates(anchorDateStr);
+  const today = todayStr();
+  const relevantDays = days.filter(d=> d<=today);
+  let eaten=0, burned=0, protein=0, carbs=0, fat=0, daysLogged=0;
+  relevantDays.forEach(d=>{
+    const foods = foodLog.filter(f=>f.date===d);
+    const exs = exerciseLog.filter(x=>x.date===d);
+    if(foods.length || exs.length) daysLogged++;
+    eaten += foods.reduce((s,f)=>s+f.calories,0);
+    burned += exs.reduce((s,x)=>s+x.caloriesBurned,0);
+    protein += foods.reduce((s,f)=>s+f.protein,0);
+    carbs += foods.reduce((s,f)=>s+f.carbs,0);
+    fat += foods.reduce((s,f)=>s+f.fat,0);
+  });
+  const n = relevantDays.length || 1;
+  return {
+    avgEaten: Math.round(eaten/n), avgBurned: Math.round(burned/n), avgNet: Math.round((eaten-burned)/n),
+    avgProtein: Math.round(protein/n), avgCarbs: Math.round(carbs/n), avgFat: Math.round(fat/n),
+    totalBurned: burned, daysLogged, daysInRange: relevantDays.length
+  };
+}
+
+function renderWeeklyStats(){
+  const el = document.getElementById('weeklyStatsCard');
+  if(!el) return;
+  const w = weekTotals(healthViewDate);
+  el.innerHTML = `
+    <h3>Weekly Summary</h3>
+    <div class="weekly-stats-grid">
+      <div class="ws-cell"><span class="ws-cell-num">${w.avgEaten}</span><span class="ws-cell-lbl">Avg Eaten/day</span></div>
+      <div class="ws-cell"><span class="ws-cell-num">${w.avgBurned}</span><span class="ws-cell-lbl">Avg Burned/day</span></div>
+      <div class="ws-cell"><span class="ws-cell-num">${w.avgNet}</span><span class="ws-cell-lbl">Avg Net/day</span></div>
+      <div class="ws-cell"><span class="ws-cell-num">${w.avgProtein}g</span><span class="ws-cell-lbl">Avg Protein</span></div>
+      <div class="ws-cell"><span class="ws-cell-num">${w.avgCarbs}g</span><span class="ws-cell-lbl">Avg Carbs</span></div>
+      <div class="ws-cell"><span class="ws-cell-num">${w.avgFat}g</span><span class="ws-cell-lbl">Avg Fat</span></div>
+      <div class="ws-cell"><span class="ws-cell-num">${w.daysLogged}/${w.daysInRange}</span><span class="ws-cell-lbl">Days Logged</span></div>
+    </div>
+  `;
+}
+
+async function getMealSuggestion(question, totals, remaining){
+  const payloadTotals = {
+    ...totals,
+    calorieTarget: healthSettings.calories,
+    proteinTarget: healthSettings.protein,
+    carbsTarget: healthSettings.carbs,
+    fatTarget: healthSettings.fat
+  };
+  const res = await fetch('/api/estimate', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ type:'suggest', question, totals: payloadTotals, remaining })
+  });
+  if(!res.ok){
+    const err = await res.json().catch(()=>({}));
+    throw new Error(err.error || 'Suggestion failed');
+  }
+  const data = await res.json();
+  return data.suggestion;
+}
+
+async function getSuggestion(){
+  const el = document.getElementById('suggestInput');
+  const question = el.value.trim();
+  const btn = document.getElementById('suggestBtn');
+  const out = document.getElementById('suggestOutput');
+  btn.disabled = true; btn.textContent = '...';
+  try{
+    const t = todayTotals(healthViewDate);
+    const remaining = {
+      calories: healthSettings.calories - t.net,
+      protein: healthSettings.protein - t.protein,
+      carbs: healthSettings.carbs - t.carbs,
+      fat: healthSettings.fat - t.fat
+    };
+    const result = await getMealSuggestion(question, t, remaining);
+    out.textContent = result;
+    out.style.display = 'block';
+  }catch(e){
+    console.error(e);
+    out.textContent = "Couldn't get a suggestion right now. Try again.";
+    out.style.display = 'block';
+  }finally{
+    btn.disabled = false; btn.textContent = 'Suggest';
+  }
+}
+
 function renderHealthView(){
+  if(!healthViewDate) healthViewDate = todayStr();
+  renderHealthDateNav();
   renderHealthSummary();
   renderWeightGoalCard();
   renderDailyProgress();
-  const today = todayStr();
+  renderWeeklyStats();
+  renderRecentFoodChips();
+  const day = healthViewDate;
+  const isToday = day === todayStr();
 
   const foodEl = document.getElementById('foodListInner');
   if(foodEl){
-    const foods = foodLog.filter(f=>f.date===today);
-    foodEl.innerHTML = foods.length ? foods.map(foodRowHtml).join('') : '<div class="empty">No food logged today.</div>';
+    const foods = foodLog.filter(f=>f.date===day);
+    foodEl.innerHTML = foods.length ? foods.map(foodRowHtml).join('') : `<div class="empty">No food logged ${isToday?'today':'this day'}.</div>`;
   }
 
   const exEl = document.getElementById('exerciseListInner');
   if(exEl){
-    const exs = exerciseLog.filter(x=>x.date===today);
-    exEl.innerHTML = exs.length ? exs.map(exerciseRowHtml).join('') : '<div class="empty">No exercise logged today.</div>';
+    const exs = exerciseLog.filter(x=>x.date===day);
+    exEl.innerHTML = exs.length ? exs.map(exerciseRowHtml).join('') : `<div class="empty">No exercise logged ${isToday?'today':'this day'}.</div>`;
   }
 
   const weightNote = document.getElementById('weightNote');
   if(weightNote){
-    const todayWeight = weightLog.find(w=>w.date===today);
-    weightNote.textContent = todayWeight ? `Logged today: ${todayWeight.weight}` : 'Not logged today';
+    const dayWeight = weightLog.find(w=>w.date===day);
+    weightNote.textContent = dayWeight ? `Logged: ${dayWeight.weight}` : `Not logged ${isToday?'today':'this day'}`;
   }
 }
 

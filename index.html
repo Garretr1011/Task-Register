@@ -192,11 +192,23 @@
     <button class="navbtn" onclick="openHealthSettingsModal()" title="Edit targets and goal">&#9881;</button>
   </div>
   <div class="shop-body">
+    <div id="healthDateNav"></div>
     <div class="statsbar health-statsbar" id="healthSummary"></div>
 
     <div class="weight-goal-card" id="weightGoalCard"></div>
 
     <div class="daily-progress-card" id="dailyProgressCard"></div>
+
+    <div class="weekly-stats-card" id="weeklyStatsCard"></div>
+
+    <div class="suggest-card" id="suggestCard">
+      <h3>Meal Suggestions</h3>
+      <div class="suggest-form">
+        <input type="text" id="suggestInput" placeholder="Ask e.g. &quot;quick protein snack for tonight&quot; (optional)">
+        <button class="btn-add" id="suggestBtn" onclick="getSuggestion()">Suggest</button>
+      </div>
+      <div id="suggestOutput" class="suggest-output" style="display:none;"></div>
+    </div>
 
     <div class="health-entry-grid">
       <div class="health-entry-card">
@@ -208,6 +220,7 @@
           <button class="btn-add" id="foodAddBtn" onclick="logFood()">Log</button>
         </div>
         <div id="foodPhotoPreview" class="food-photo-preview" style="display:none;"></div>
+        <div id="recentFoodChips" class="recent-chips"></div>
         <div id="foodListInner"></div>
       </div>
       <div class="health-entry-card">

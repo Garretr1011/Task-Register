@@ -1200,6 +1200,108 @@ table.habit-grid tr:last-child td{border-bottom:none;}
   cursor:pointer;
   flex-shrink:0;
 }
+.weight-chart-toggle{
+  font-size:12px;
+  font-weight:600;
+  color:var(--accent);
+  cursor:pointer;
+  text-align:center;
+  margin-top:10px;
+}
+.weight-chart-toggle:hover{text-decoration:underline;}
+.weight-chart-wrap{
+  margin-top:12px;
+  padding-top:12px;
+  border-top:1px solid var(--line);
+}
+.weight-chart-svg{
+  width:100%;
+  height:auto;
+  display:block;
+}
+.weekly-stats-card{
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  padding:16px;
+  margin-bottom:16px;
+}
+.weekly-stats-card h3{
+  font-family:'Space Grotesk',sans-serif;
+  font-size:12px;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:0.05em;
+  margin:0 0 14px 0;
+}
+.weekly-stats-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit, minmax(90px, 1fr));
+  gap:12px;
+}
+.ws-cell{text-align:center;}
+.ws-cell-num{
+  display:block;
+  font-family:'JetBrains Mono',monospace;
+  font-size:16px;
+  font-weight:600;
+  color:var(--ink);
+}
+.ws-cell-lbl{
+  font-size:9px;
+  text-transform:uppercase;
+  letter-spacing:0.04em;
+  color:var(--ink-soft);
+}
+.recent-chips{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+  align-items:center;
+  margin-bottom:12px;
+}
+.recent-chips-label{
+  font-size:11px;
+  color:var(--ink-soft);
+  font-weight:600;
+  margin-right:2px;
+}
+.suggest-card{
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  padding:16px;
+  margin-bottom:16px;
+}
+.suggest-card h3{
+  font-family:'Space Grotesk',sans-serif;
+  font-size:12px;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:0.05em;
+  margin:0 0 12px 0;
+}
+.suggest-form{
+  display:flex;
+  gap:8px;
+}
+.suggest-form input{
+  flex:1;
+  padding:9px 12px;
+  border:1px solid var(--line-strong);
+  border-radius:var(--radius);
+  font-size:13px;
+  font-family:inherit;
+}
+.suggest-output{
+  margin-top:12px;
+  padding:12px;
+  background:var(--bg);
+  border-radius:var(--radius);
+  font-size:13px;
+  line-height:1.6;
+  white-space:pre-line;
+}
 
 @media (max-width:640px){
   .matrix{grid-template-columns:1fr;}

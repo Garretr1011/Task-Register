@@ -12,9 +12,9 @@ export default async function handler(req, res) {
     return;
   }
 
-  const { type, text, image } = req.body || {};
-  if (!type || (type !== 'food' && type !== 'exercise')) {
-    res.status(400).json({ error: 'Expected { type: "food"|"exercise", text?: string, image?: string }' });
+  const { type, text, image, question, totals, remaining } = req.body || {};
+  if (!type || (type !== 'food' && type !== 'exercise' && type !== 'suggest')) {
+    res.status(400).json({ error: 'Expected { type: "food"|"exercise"|"suggest", ... }' });
     return;
   }
   if (type === 'exercise' && !text) {
@@ -23,6 +23,10 @@ export default async function handler(req, res) {
   }
   if (type === 'food' && !text && !image) {
     res.status(400).json({ error: 'Food entries need a description, a photo, or both' });
+    return;
+  }
+  if (type === 'suggest' && (!totals || !remaining)) {
+    res.status(400).json({ error: 'Suggestions need today\'s totals and remaining targets' });
     return;
   }
 
@@ -49,8 +53,22 @@ export default async function handler(req, res) {
     ];
   } else if (type === 'food') {
     content = `Estimate nutrition facts for this food description: "${text}"\n\nRespond with ONLY a JSON object, no markdown formatting, no explanation, in this exact shape:\n{"description":"...", "calories":123, "protein":12, "carbs":34, "fat":5}\n\nNumbers are grams for protein/carbs/fat, calories as a whole number. Give your best realistic single estimate for a typical serving as described.`;
-  } else {
+  } else if (type === 'exercise') {
     content = `Estimate calories burned for this exercise description: "${text}"\n\nRespond with ONLY a JSON object, no markdown formatting, no explanation, in this exact shape:\n{"description":"...", "caloriesBurned":250, "durationMinutes":30}\n\nIf duration isn't mentioned, make a reasonable estimate based on the activity described.`;
+  } else {
+    // suggest
+    content = `You are a nutrition assistant helping someone finish their day within their targets.
+
+Today so far: ${totals.eaten} calories eaten, ${totals.burned} calories burned, net ${totals.net} calories (target ${totals.calorieTarget}).
+Protein: ${totals.protein}g of ${totals.proteinTarget}g target.
+Carbs: ${totals.carbs}g of ${totals.carbsTarget}g target.
+Fat: ${totals.fat}g of ${totals.fatTarget}g target.
+
+Remaining today: ${remaining.calories} calories, ${remaining.protein}g protein, ${remaining.carbs}g carbs, ${remaining.fat}g fat.
+
+${question ? `The user specifically asks: "${question}"` : 'Suggest 2-4 practical food or snack options that would help them hit their remaining targets for today.'}
+
+Keep it brief and practical: a short list of specific food or snack suggestions with rough calorie and macro estimates for each. Plain text only, use simple dashes for list items, no markdown headers or bold.`;
   }
 
   try {
@@ -63,7 +81,7 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 300,
+        max_tokens: type === 'suggest' ? 400 : 300,
         messages: [{ role: 'user', content }]
       })
     });
@@ -80,6 +98,12 @@ export default async function handler(req, res) {
       .map(b => b.text)
       .join('')
       .trim();
+
+    if (type === 'suggest') {
+      res.status(200).json({ suggestion: raw });
+      return;
+    }
+
     const cleaned = raw.replace(/```json|```/g, '').trim();
     const parsed = JSON.parse(cleaned);
     res.status(200).json(parsed);
