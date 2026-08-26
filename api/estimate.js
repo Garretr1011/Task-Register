@@ -17,8 +17,8 @@ export default async function handler(req, res) {
     res.status(400).json({ error: 'Expected { type: "food"|"exercise"|"suggest", ... }' });
     return;
   }
-  if (type === 'exercise' && !text) {
-    res.status(400).json({ error: 'Exercise entries need a text description' });
+  if (type === 'exercise' && !text && !image) {
+    res.status(400).json({ error: 'Exercise entries need a description, a photo, or both' });
     return;
   }
   if (type === 'food' && !text && !image) {
@@ -53,6 +53,19 @@ export default async function handler(req, res) {
     ];
   } else if (type === 'food') {
     content = `Estimate nutrition facts for this food description: "${text}"\n\nRespond with ONLY a JSON object, no markdown formatting, no explanation, in this exact shape:\n{"description":"...", "calories":123, "protein":12, "carbs":34, "fat":5}\n\nNumbers are grams for protein/carbs/fat, calories as a whole number. Give your best realistic single estimate for a typical serving as described.`;
+  } else if (type === 'exercise' && image) {
+    const match = /^data:(image\/[a-zA-Z]+);base64,(.+)$/.exec(image);
+    if (!match) {
+      res.status(400).json({ error: 'Invalid image format' });
+      return;
+    }
+    const mediaType = match[1];
+    const base64Data = match[2];
+    const promptText = `Read the workout data shown in this screenshot (e.g. from a fitness app, smartwatch, or Garmin).${text ? ` Additional context from the user: "${text}"` : ''}\n\nRespond with ONLY a JSON object, no markdown formatting, no explanation, in this exact shape:\n{"description":"...", "caloriesBurned":250, "durationMinutes":30}\n\nRead the calories burned and duration directly from the screenshot if visible; if a figure isn't clearly shown, make a reasonable estimate from what is visible (activity type, distance, heart rate, pace, etc).`;
+    content = [
+      { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64Data } },
+      { type: 'text', text: promptText }
+    ];
   } else if (type === 'exercise') {
     content = `Estimate calories burned for this exercise description: "${text}"\n\nRespond with ONLY a JSON object, no markdown formatting, no explanation, in this exact shape:\n{"description":"...", "caloriesBurned":250, "durationMinutes":30}\n\nIf duration isn't mentioned, make a reasonable estimate based on the activity described.`;
   } else {

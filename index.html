@@ -220,15 +220,19 @@
           <button class="btn-add" id="foodAddBtn" onclick="logFood()">Log</button>
         </div>
         <div id="foodPhotoPreview" class="food-photo-preview" style="display:none;"></div>
-        <div id="recentFoodChips" class="recent-chips"></div>
+        <div id="mealChips" class="recent-chips"></div>
+        <div id="frequentFoodChips" class="recent-chips"></div>
         <div id="foodListInner"></div>
       </div>
       <div class="health-entry-card">
         <h3>Exercise</h3>
         <div class="health-form">
-          <input type="text" id="exerciseInput" placeholder="e.g. 30 min run">
+          <input type="text" id="exerciseInput" placeholder="Describe it, or add a screenshot">
+          <label class="photo-btn" for="exercisePhotoInput" title="Add photo/screenshot">&#128247;</label>
+          <input type="file" id="exercisePhotoInput" accept="image/*" style="display:none;">
           <button class="btn-add" id="exerciseAddBtn" onclick="logExercise()">Log</button>
         </div>
+        <div id="exercisePhotoPreview" class="food-photo-preview" style="display:none;"></div>
         <div id="exerciseListInner"></div>
       </div>
       <div class="health-entry-card">
@@ -267,9 +271,27 @@
       <label class="qa-label" for="targetGoalWeight">Goal weight (kg)</label>
       <input type="number" id="targetGoalWeight" step="0.1">
     </div>
+    <div class="modal-row">
+      <label class="qa-label" for="targetDeadline">Deadline</label>
+      <input type="date" id="targetDeadline">
+    </div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeHealthSettingsModal()">Cancel</button>
       <button class="btn-add" onclick="saveHealthSettingsForm()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="mealModal">
+  <div class="modal">
+    <h3 id="mealModalTitle">Meals</h3>
+    <div id="mealListInner"></div>
+    <div class="modal-divider"></div>
+    <input type="text" id="newMealName" placeholder="Meal name (e.g. Morning Yoghurt)">
+    <textarea id="newMealIngredients" placeholder="Ingredients, e.g. Greek yoghurt, oats, protein powder, blueberries" rows="3" class="meal-ingredients-input"></textarea>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeMealModal()">Close</button>
+      <button class="btn-add" id="mealSaveBtn" onclick="saveMeal()">Add</button>
     </div>
   </div>
 </div>

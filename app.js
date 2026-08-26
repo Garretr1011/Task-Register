@@ -204,6 +204,7 @@ async function showApp(){
   await loadHabitLog();
   renderHabitsView();
   await loadHealthSettings();
+  await loadMeals();
   await loadHealthLogs();
   renderHealthView();
   loadTasks();
@@ -1793,7 +1794,7 @@ function render(){
 
 /* ---------- Health Log ---------- */
 
-let healthSettings = { calories:2100, protein:180, carbs:210, fat:60, goalWeight:null };
+let healthSettings = { calories:2100, protein:180, carbs:210, fat:60, goalWeight:null, deadline:null };
 let healthViewDate = null;
 
 function shiftHealthWeek(delta){
@@ -1855,7 +1856,8 @@ async function loadHealthSettings(){
     if(data){
       healthSettings = {
         calories: data.calories, protein: data.protein, carbs: data.carbs, fat: data.fat,
-        goalWeight: data.goal_weight != null ? parseFloat(data.goal_weight) : null
+        goalWeight: data.goal_weight != null ? parseFloat(data.goal_weight) : null,
+        deadline: data.deadline || null
       };
     }
   }catch(e){
@@ -1870,6 +1872,7 @@ async function saveHealthSettingsData(){
       calories: healthSettings.calories, protein: healthSettings.protein,
       carbs: healthSettings.carbs, fat: healthSettings.fat,
       goal_weight: healthSettings.goalWeight,
+      deadline: healthSettings.deadline,
       updated_at: new Date().toISOString()
     });
     if(error) console.error('Save health settings failed', error);
@@ -1878,12 +1881,163 @@ async function saveHealthSettingsData(){
   }
 }
 
+let meals = [];
+let editingMealId = null;
+
+async function loadMeals(){
+  try{
+    const { data, error } = await sb.from('meals').select('*').order('created_at', { ascending:true });
+    if(error) throw error;
+    meals = (data||[]).map(r=>({
+      id: r.id, label: r.label, ingredients: r.ingredients,
+      calories: r.calories, protein: r.protein, carbs: r.carbs, fat: r.fat
+    }));
+  }catch(e){
+    console.error('Load meals failed', e);
+    meals = [];
+  }
+}
+
+async function persistMeal(m){
+  try{
+    const { error } = await sb.from('meals').upsert({
+      id: m.id, user_id: currentUser.id, label: m.label, ingredients: m.ingredients,
+      calories: m.calories, protein: m.protein, carbs: m.carbs, fat: m.fat
+    });
+    if(error) console.error('Save meal failed', error);
+  }catch(e){
+    console.error('Save meal failed', e);
+  }
+}
+
+async function removeMealRemote(id){
+  try{
+    const { error } = await sb.from('meals').delete().eq('id', id);
+    if(error) console.error('Delete meal failed', error);
+  }catch(e){
+    console.error('Delete meal failed', e);
+  }
+}
+
+function openMealModal(){
+  resetMealForm();
+  renderMealModalList();
+  document.getElementById('mealModal').style.display = 'flex';
+}
+
+function closeMealModal(){
+  document.getElementById('mealModal').style.display = 'none';
+}
+
+function resetMealForm(){
+  editingMealId = null;
+  document.getElementById('newMealName').value = '';
+  document.getElementById('newMealIngredients').value = '';
+  document.getElementById('mealSaveBtn').textContent = 'Add';
+  document.getElementById('mealModalTitle').textContent = 'Meals';
+}
+
+function renderMealModalList(){
+  const el = document.getElementById('mealListInner');
+  if(!el) return;
+  if(meals.length===0){
+    el.innerHTML = `<div class="empty">No meals saved yet.</div>`;
+    return;
+  }
+  el.innerHTML = meals.map(m=>`
+    <div class="catmanage-row">
+      <span class="catmanage-name">${escapeHtml(m.label)} <span style="color:var(--ink-soft);font-size:11px;">(${m.calories} cal)</span></span>
+      <span class="act" onclick="editMealStart('${m.id}')">&#9998;</span>
+      <span class="act del" onclick="deleteMeal('${m.id}')">&times;</span>
+    </div>`).join('');
+}
+
+function editMealStart(id){
+  const m = meals.find(x=>x.id===id);
+  if(!m) return;
+  editingMealId = id;
+  document.getElementById('newMealName').value = m.label;
+  document.getElementById('newMealIngredients').value = m.ingredients;
+  document.getElementById('mealSaveBtn').textContent = 'Save changes';
+  document.getElementById('mealModalTitle').textContent = 'Edit meal';
+}
+
+function deleteMeal(id){
+  meals = meals.filter(m=>m.id!==id);
+  removeMealRemote(id);
+  renderMealModalList();
+  renderMealChips();
+}
+
+async function saveMeal(){
+  const name = document.getElementById('newMealName').value.trim();
+  const ingredients = document.getElementById('newMealIngredients').value.trim();
+  if(!name || !ingredients) return;
+  const btn = document.getElementById('mealSaveBtn');
+  btn.disabled = true; btn.textContent = '...';
+  try{
+    const result = await estimateFood(ingredients);
+    const mealData = {
+      label: name, ingredients,
+      calories: Math.round(result.calories||0),
+      protein: Math.round(result.protein||0),
+      carbs: Math.round(result.carbs||0),
+      fat: Math.round(result.fat||0)
+    };
+    let target;
+    if(editingMealId){
+      target = meals.find(x=>x.id===editingMealId);
+      if(target) Object.assign(target, mealData);
+    }else{
+      target = { id: uid(), ...mealData };
+      meals.push(target);
+    }
+    persistMeal(target);
+    resetMealForm();
+    renderMealModalList();
+    renderMealChips();
+  }catch(e){
+    console.error(e);
+    alert("Couldn't work out macros for that meal. Try again.");
+  }finally{
+    btn.disabled = false;
+    btn.textContent = editingMealId ? 'Save changes' : 'Add';
+  }
+}
+
+function renderMealChips(){
+  const el = document.getElementById('mealChips');
+  if(!el) return;
+  let html = `<span class="chip addcat" onclick="openMealModal()">+ Meal</span>`;
+  meals.forEach(m=>{
+    html += `<span class="catchip" onclick="logMeal('${m.id}')" title="${m.calories} cal &middot; P${m.protein} C${m.carbs} F${m.fat}">${escapeHtml(m.label)}</span>`;
+  });
+  el.innerHTML = html;
+}
+
+function logMeal(id){
+  const m = meals.find(x=>x.id===id);
+  if(!m) return;
+  const entry = {
+    id: uid(), date: healthViewDate,
+    description: m.label,
+    calories: m.calories, protein: m.protein, carbs: m.carbs, fat: m.fat,
+    photoUrl: null,
+    createdAt: Date.now()
+  };
+  foodLog.push(entry);
+  persistFoodEntry(entry);
+  renderHealthView();
+  showHealthToast(`${m.label} added`);
+}
+
 function openHealthSettingsModal(){
   document.getElementById('targetCalories').value = healthSettings.calories;
   document.getElementById('targetProtein').value = healthSettings.protein;
   document.getElementById('targetCarbs').value = healthSettings.carbs;
   document.getElementById('targetFat').value = healthSettings.fat;
   document.getElementById('targetGoalWeight').value = healthSettings.goalWeight != null ? healthSettings.goalWeight : '';
+  document.getElementById('targetDeadline').value = healthSettings.deadline || '';
   document.getElementById('healthSettingsModal').style.display = 'flex';
 }
 
@@ -1898,6 +2052,7 @@ function saveHealthSettingsForm(){
   healthSettings.fat = parseInt(document.getElementById('targetFat').value) || healthSettings.fat;
   const gw = parseFloat(document.getElementById('targetGoalWeight').value);
   healthSettings.goalWeight = isNaN(gw) ? null : gw;
+  healthSettings.deadline = document.getElementById('targetDeadline').value || null;
   saveHealthSettingsData();
   closeHealthSettingsModal();
   renderHealthView();
@@ -1979,10 +2134,10 @@ async function estimateFood(text, image){
   return res.json();
 }
 
-async function estimateExercise(text){
+async function estimateExercise(text, image){
   const res = await fetch('/api/estimate', {
     method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({type:'exercise', text})
+    body: JSON.stringify({type:'exercise', text: text||'', image: image||null})
   });
   if(!res.ok){
     const err = await res.json().catch(()=>({}));
@@ -2025,25 +2180,27 @@ async function logFood(){
 async function logExercise(){
   const el = document.getElementById('exerciseInput');
   const text = el.value.trim();
-  if(!text) return;
+  if(!text && !pendingExercisePhoto) return;
   const btn = document.getElementById('exerciseAddBtn');
   btn.disabled = true; btn.textContent = '...';
   try{
-    const result = await estimateExercise(text);
+    const result = await estimateExercise(text, pendingExercisePhoto);
     const entry = {
       id: uid(), date: healthViewDate,
-      description: result.description || text,
+      description: result.description || text || 'Exercise photo',
       caloriesBurned: Math.round(result.caloriesBurned||0),
       durationMinutes: result.durationMinutes ? Math.round(result.durationMinutes) : null,
+      photoUrl: pendingExercisePhoto,
       createdAt: Date.now()
     };
     exerciseLog.push(entry);
     persistExerciseEntry(entry);
     el.value = '';
+    clearExercisePhoto();
     renderHealthView();
   }catch(e){
     console.error(e);
-    alert("Couldn't estimate that exercise entry. Try rephrasing and log again.");
+    alert("Couldn't read that exercise entry. Try rephrasing/retaking the photo and log again.");
   }finally{
     btn.disabled = false; btn.textContent = 'Log';
   }
@@ -2091,7 +2248,7 @@ function todayTotals(dateStr){
 }
 
 function foodRowHtml(f){
-  const thumb = f.photoUrl ? `<img class="food-thumb" src="${f.photoUrl}" onclick="viewFoodPhoto('${f.id}')">` : '';
+  const thumb = f.photoUrl ? `<img class="food-thumb" src="${f.photoUrl}" onclick="openPhotoLightbox('${f.photoUrl}')">` : '';
   return `<div class="health-row">
     ${thumb}
     <div>
@@ -2099,20 +2256,22 @@ function foodRowHtml(f){
       <div class="health-row-macros">${f.calories} cal &middot; P ${f.protein}g &middot; C ${f.carbs}g &middot; F ${f.fat}g</div>
     </div>
     <div class="actions">
-      <span class="act" onclick="repeatFoodEntry('${f.id}')" title="Repeat to this day">&#8635;</span>
+      <span class="act" onclick="repeatFoodEntry('${f.id}')" title="Add to today">&#8635;</span>
       <span class="act del" onclick="deleteFoodEntry('${f.id}')">&times;</span>
     </div>
   </div>`;
 }
 
 function exerciseRowHtml(x){
+  const thumb = x.photoUrl ? `<img class="food-thumb" src="${x.photoUrl}" onclick="openPhotoLightbox('${x.photoUrl}')">` : '';
   return `<div class="health-row">
+    ${thumb}
     <div>
       <div class="health-row-desc">${escapeHtml(x.description)}</div>
       <div class="health-row-macros">${x.caloriesBurned} cal burned${x.durationMinutes?' &middot; '+x.durationMinutes+' min':''}</div>
     </div>
     <div class="actions">
-      <span class="act" onclick="repeatExerciseEntry('${x.id}')" title="Repeat to this day">&#8635;</span>
+      <span class="act" onclick="repeatExerciseEntry('${x.id}')" title="Add to today">&#8635;</span>
       <span class="act del" onclick="deleteExerciseEntry('${x.id}')">&times;</span>
     </div>
   </div>`;
@@ -2146,6 +2305,7 @@ function renderWeightGoalCard(){
   const start = sorted[0].weight;
   const current = sorted[sorted.length-1].weight;
   const goal = healthSettings.goalWeight;
+  const deadline = healthSettings.deadline;
   const totalDelta = start - goal;
   const progressDelta = start - current;
   let pct = totalDelta !== 0 ? (progressDelta/totalDelta)*100 : 0;
@@ -2154,6 +2314,30 @@ function renderWeightGoalCard(){
   const direction = goal < start ? 'lose' : 'gain';
   const reached = (direction==='lose' && current<=goal) || (direction==='gain' && current>=goal);
   const emoji = reached ? '🎉' : pct>=75 ? '🎯' : pct>=40 ? '💪' : '🚀';
+
+  let deadlineInfo = '';
+  if(deadline){
+    const today = todayStr();
+    const startDateStr = sorted[0].date;
+    const msPerDay = 86400000;
+    const daysLeft = Math.ceil((new Date(deadline+'T00:00:00') - new Date(today+'T00:00:00')) / msPerDay);
+    const totalDays = Math.max(1, Math.ceil((new Date(deadline+'T00:00:00') - new Date(startDateStr+'T00:00:00')) / msPerDay));
+    const daysElapsed = Math.max(0, Math.ceil((new Date(today+'T00:00:00') - new Date(startDateStr+'T00:00:00')) / msPerDay));
+    const frac = Math.min(1, daysElapsed/totalDays);
+    const expected = start - (start-goal)*frac;
+    const diff = direction==='lose' ? (current-expected) : (expected-current);
+    let pace;
+    if(reached) pace = {label:'Goal reached', cls:'pace-ahead'};
+    else if(daysLeft<0) pace = {label:'Past deadline', cls:'pace-behind'};
+    else if(diff <= -0.2) pace = {label:'Ahead of pace', cls:'pace-ahead'};
+    else if(diff <= 0.2) pace = {label:'On track', cls:'pace-ontrack'};
+    else pace = {label:'Behind pace', cls:'pace-behind'};
+    deadlineInfo = `<div class="weight-goal-deadline">
+      <span class="pace-badge ${pace.cls}">${pace.label}</span>
+      <span>${daysLeft>=0 ? daysLeft+' days left' : 'Deadline passed'} &middot; by ${fmtDateShort(deadline)}</span>
+    </div>`;
+  }
+
   el.innerHTML = `
     <div class="weight-goal-top">
       <div class="weight-goal-emoji">${emoji}</div>
@@ -2165,8 +2349,9 @@ function renderWeightGoalCard(){
     </div>
     <div class="weight-goal-bar"><div class="weight-goal-fill" style="width:${pct}%;"></div></div>
     <div class="weight-goal-caption">${reached ? 'Goal reached! &#127881;' : `${remaining}kg to go &middot; ${Math.round(pct)}% of the way there`}</div>
+    ${deadlineInfo}
     <div class="weight-chart-toggle" onclick="toggleWeightChart()">${weightChartOpen ? '&#9650; Hide progress chart' : '&#9660; View progress chart'}</div>
-    ${weightChartOpen ? `<div class="weight-chart-wrap">${buildWeightChartSvg(sorted, goal)}</div>` : ''}
+    ${weightChartOpen ? `<div class="weight-chart-wrap">${buildWeightChartSvg(sorted, goal, deadline)}</div>` : ''}
   `;
 }
 
@@ -2177,8 +2362,21 @@ function toggleWeightChart(){
   renderWeightGoalCard();
 }
 
-function buildWeightChartSvg(data, goal){
+function buildWeightChartSvg(data, goal, deadline){
   const w = 600, h = 180, padL = 36, padR = 12, padT = 12, padB = 24;
+  const startDate = new Date(data[0].date+'T00:00:00');
+  let endDate = new Date(data[data.length-1].date+'T00:00:00');
+  if(deadline){
+    const dl = new Date(deadline+'T00:00:00');
+    if(dl > endDate) endDate = dl;
+  }
+  const totalMs = endDate - startDate;
+  const xAt = (dateStr) => {
+    const d = new Date(dateStr+'T00:00:00');
+    const frac = totalMs>0 ? (d-startDate)/totalMs : 0;
+    return padL + frac*(w-padL-padR);
+  };
+
   const weights = data.map(d=>d.weight);
   let minW = Math.min(...weights);
   let maxW = Math.max(...weights);
@@ -2186,12 +2384,10 @@ function buildWeightChartSvg(data, goal){
   if(minW === maxW){ minW -= 1; maxW += 1; }
   const pad = (maxW-minW)*0.1;
   minW -= pad; maxW += pad;
-
-  const xStep = data.length>1 ? (w-padL-padR)/(data.length-1) : 0;
-  const xAt = i => padL + i*xStep;
   const yAt = val => padT + (h-padT-padB) * (1 - (val-minW)/(maxW-minW));
 
-  const points = data.map((d,i)=> `${xAt(i)},${yAt(d.weight)}`).join(' ');
+  const points = data.map(d=> `${xAt(d.date)},${yAt(d.weight)}`).join(' ');
+  const dots = data.map(d=> `<circle cx="${xAt(d.date)}" cy="${yAt(d.weight)}" r="3" fill="var(--accent)"/>`).join('');
 
   let goalLine = '';
   if(goal!=null){
@@ -2200,11 +2396,18 @@ function buildWeightChartSvg(data, goal){
       <text x="${w-padR}" y="${gy-4}" font-size="9" fill="var(--catpersonal)" text-anchor="end">Goal ${goal}</text>`;
   }
 
-  const dots = data.map((d,i)=> `<circle cx="${xAt(i)}" cy="${yAt(d.weight)}" r="3" fill="var(--accent)"/>`).join('');
-  const firstLabel = data.length ? fmtDateShort(data[0].date) : '';
-  const lastLabel = data.length>1 ? fmtDateShort(data[data.length-1].date) : '';
+  let projectionLine = '';
+  if(goal!=null && deadline){
+    const x1 = xAt(data[0].date), y1 = yAt(data[0].weight);
+    const x2 = xAt(deadline), y2 = yAt(goal);
+    projectionLine = `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="var(--ink-soft)" stroke-width="1.5" stroke-dasharray="2,3"/>`;
+  }
+
+  const firstLabel = fmtDateShort(data[0].date);
+  const lastLabel = deadline ? fmtDateShort(deadline) : (data.length>1 ? fmtDateShort(data[data.length-1].date) : '');
 
   return `<svg viewBox="0 0 ${w} ${h}" class="weight-chart-svg">
+    ${projectionLine}
     <polyline points="${points}" fill="none" stroke="var(--accent)" stroke-width="2"/>
     ${goalLine}
     ${dots}
@@ -2238,6 +2441,7 @@ function renderDailyProgress(){
 }
 
 let pendingFoodPhoto = null;
+let pendingExercisePhoto = null;
 
 function resizeImageFile(file, maxWidth, quality){
   return new Promise((resolve, reject)=>{
@@ -2284,10 +2488,30 @@ function clearFoodPhoto(){
   document.getElementById('foodPhotoPreview').innerHTML = '';
 }
 
-function viewFoodPhoto(id){
-  const f = foodLog.find(x=>x.id===id);
-  if(!f || !f.photoUrl) return;
-  document.getElementById('lightboxImg').src = f.photoUrl;
+document.getElementById('exercisePhotoInput').addEventListener('change', async (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  try{
+    // Screenshots need to stay readable, so use a wider max size and higher quality than food photos.
+    pendingExercisePhoto = await resizeImageFile(file, 900, 0.85);
+    const preview = document.getElementById('exercisePhotoPreview');
+    preview.innerHTML = `<img src="${pendingExercisePhoto}"><span class="act del" onclick="clearExercisePhoto()">&times;</span>`;
+    preview.style.display = 'flex';
+  }catch(err){
+    console.error(err);
+  }
+});
+
+function clearExercisePhoto(){
+  pendingExercisePhoto = null;
+  document.getElementById('exercisePhotoInput').value = '';
+  document.getElementById('exercisePhotoPreview').style.display = 'none';
+  document.getElementById('exercisePhotoPreview').innerHTML = '';
+}
+
+function openPhotoLightbox(url){
+  if(!url) return;
+  document.getElementById('lightboxImg').src = url;
   document.getElementById('photoLightbox').style.display = 'flex';
 }
 
@@ -2295,11 +2519,25 @@ function closePhotoLightbox(){
   document.getElementById('photoLightbox').style.display = 'none';
 }
 
+function showHealthToast(msg){
+  let toast = document.getElementById('healthToast');
+  if(!toast){
+    toast = document.createElement('div');
+    toast.id = 'healthToast';
+    toast.className = 'health-toast';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = msg;
+  toast.classList.add('show');
+  clearTimeout(toast._hideTimer);
+  toast._hideTimer = setTimeout(()=> toast.classList.remove('show'), 2200);
+}
+
 function repeatFoodEntry(id){
   const src = foodLog.find(f=>f.id===id);
   if(!src) return;
   const entry = {
-    id: uid(), date: healthViewDate,
+    id: uid(), date: todayStr(),
     description: src.description,
     calories: src.calories, protein: src.protein, carbs: src.carbs, fat: src.fat,
     photoUrl: src.photoUrl || null,
@@ -2308,43 +2546,61 @@ function repeatFoodEntry(id){
   foodLog.push(entry);
   persistFoodEntry(entry);
   renderHealthView();
+  showHealthToast(`Added "${src.description}" to today`);
 }
 
 function repeatExerciseEntry(id){
   const src = exerciseLog.find(x=>x.id===id);
   if(!src) return;
   const entry = {
-    id: uid(), date: healthViewDate,
+    id: uid(), date: todayStr(),
     description: src.description,
     caloriesBurned: src.caloriesBurned, durationMinutes: src.durationMinutes,
+    photoUrl: src.photoUrl || null,
     createdAt: Date.now()
   };
   exerciseLog.push(entry);
   persistExerciseEntry(entry);
   renderHealthView();
+  showHealthToast(`Added "${src.description}" to today`);
 }
 
-function recentFoodOptions(){
-  const seen = new Set();
-  const list = [];
-  [...foodLog].sort((a,b)=> b.createdAt - a.createdAt).forEach(f=>{
+function frequentFoodOptions(){
+  const counts = {};
+  const latestByKey = {};
+  foodLog.forEach(f=>{
     const key = f.description.toLowerCase();
-    if(!seen.has(key)){
-      seen.add(key);
-      list.push(f);
-    }
+    counts[key] = (counts[key]||0) + 1;
+    if(!latestByKey[key] || f.createdAt > latestByKey[key].createdAt) latestByKey[key] = f;
   });
-  return list.slice(0, 8);
+  const list = Object.keys(counts).map(key=>({ entry: latestByKey[key], count: counts[key] }));
+  list.sort((a,b)=> b.count - a.count || b.entry.createdAt - a.entry.createdAt);
+  return list.slice(0, 8).map(x=>x.entry);
 }
 
-function renderRecentFoodChips(){
-  const el = document.getElementById('recentFoodChips');
+function renderFrequentFoodChips(){
+  const el = document.getElementById('frequentFoodChips');
   if(!el) return;
-  const recents = recentFoodOptions();
-  if(recents.length===0){ el.innerHTML=''; return; }
-  el.innerHTML = `<div class="recent-chips-label">Recent:</div>` + recents.map(f=>
-    `<span class="catchip" onclick="repeatFoodEntry('${f.id}')" title="${f.calories} cal &middot; P${f.protein} C${f.carbs} F${f.fat}">${escapeHtml(f.description)}</span>`
+  const frequents = frequentFoodOptions();
+  if(frequents.length===0){ el.innerHTML=''; return; }
+  el.innerHTML = `<div class="recent-chips-label">Frequent:</div>` + frequents.map(f=>
+    `<span class="catchip" onclick="repeatFromChip('${f.id}')" title="${f.calories} cal &middot; P${f.protein} C${f.carbs} F${f.fat}">${escapeHtml(f.description)}</span>`
   ).join('');
+}
+
+function repeatFromChip(id){
+  const src = foodLog.find(f=>f.id===id);
+  if(!src) return;
+  const entry = {
+    id: uid(), date: healthViewDate,
+    description: src.description,
+    calories: src.calories, protein: src.protein, carbs: src.carbs, fat: src.fat,
+    photoUrl: null,
+    createdAt: Date.now()
+  };
+  foodLog.push(entry);
+  persistFoodEntry(entry);
+  renderHealthView();
 }
 
 function weekRangeDates(anchorDateStr){
@@ -2455,7 +2711,8 @@ function renderHealthView(){
   renderWeightGoalCard();
   renderDailyProgress();
   renderWeeklyStats();
-  renderRecentFoodChips();
+  renderFrequentFoodChips();
+  renderMealChips();
   const day = healthViewDate;
   const isToday = day === todayStr();
 

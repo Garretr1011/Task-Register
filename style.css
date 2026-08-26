@@ -1302,6 +1302,58 @@ table.habit-grid tr:last-child td{border-bottom:none;}
   line-height:1.6;
   white-space:pre-line;
 }
+.health-toast{
+  position:fixed;
+  bottom:24px;
+  left:50%;
+  transform:translateX(-50%) translateY(20px);
+  background:var(--ink);
+  color:#fff;
+  padding:10px 18px;
+  border-radius:20px;
+  font-size:13px;
+  font-weight:600;
+  opacity:0;
+  pointer-events:none;
+  transition:opacity 0.25s ease, transform 0.25s ease;
+  z-index:300;
+  max-width:80vw;
+  text-align:center;
+}
+.health-toast.show{
+  opacity:1;
+  transform:translateX(-50%) translateY(0);
+}
+.weight-goal-deadline{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  margin-top:8px;
+  font-size:11px;
+  color:var(--ink-soft);
+  flex-wrap:wrap;
+}
+.pace-badge{
+  font-size:10px;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:0.04em;
+  padding:3px 8px;
+  border-radius:10px;
+}
+.pace-badge.pace-ahead{background:var(--catpersonal-tag); color:var(--catpersonal);}
+.pace-badge.pace-ontrack{background:var(--accent-soft); color:var(--accent);}
+.pace-badge.pace-behind{background:var(--q1-soft); color:var(--q1);}
+.meal-ingredients-input{
+  width:100%;
+  padding:9px 12px;
+  border:1px solid var(--line-strong);
+  border-radius:var(--radius);
+  font-size:14px;
+  font-family:inherit;
+  resize:vertical;
+}
 
 @media (max-width:640px){
   .matrix{grid-template-columns:1fr;}
