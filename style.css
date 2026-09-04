@@ -1277,6 +1277,64 @@ table.habit-grid tr:last-child td{border-bottom:none;}
   height:auto;
   display:block;
 }
+.donut-row{
+  display:flex;
+  gap:20px;
+  flex-wrap:wrap;
+  margin-top:12px;
+  padding-top:12px;
+  border-top:1px solid var(--line);
+}
+.donut-col{
+  flex:1 1 220px;
+  min-width:200px;
+}
+.donut-col h4{
+  font-family:'Space Grotesk',sans-serif;
+  font-size:12px;
+  margin:0 0 8px 0;
+  color:var(--ink-soft);
+  text-transform:uppercase;
+  letter-spacing:0.02em;
+}
+.donut-wrap{
+  display:flex;
+  align-items:center;
+  gap:14px;
+}
+.donut-svg{
+  width:110px;
+  height:110px;
+  flex-shrink:0;
+}
+.donut-legend{
+  flex:1;
+  min-width:0;
+}
+.donut-legend-row{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  font-size:12px;
+  padding:3px 0;
+}
+.donut-swatch{
+  width:9px;
+  height:9px;
+  border-radius:2px;
+  flex-shrink:0;
+}
+.donut-legend-row span:nth-child(2){
+  flex:1;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  color:var(--ink-soft);
+}
+.donut-legend-val{
+  font-weight:600;
+  white-space:nowrap;
+}
 .weekly-stats-card{
   background:var(--surface);
   border:1px solid var(--line);
