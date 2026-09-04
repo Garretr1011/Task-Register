@@ -1706,13 +1706,16 @@ function switchMode(mode){
   document.getElementById('modeShoppingBtn').classList.toggle('active', mode==='shopping');
   document.getElementById('modeHabitsBtn').classList.toggle('active', mode==='habits');
   document.getElementById('modeHealthBtn').classList.toggle('active', mode==='health');
+  document.getElementById('modeNetworthBtn').classList.toggle('active', mode==='networth');
   document.getElementById('tasksMode').style.display = mode==='tasks' ? '' : 'none';
   document.getElementById('shoppingMode').style.display = mode==='shopping' ? '' : 'none';
   document.getElementById('habitsMode').style.display = mode==='habits' ? '' : 'none';
   document.getElementById('healthMode').style.display = mode==='health' ? '' : 'none';
+  document.getElementById('networthMode').style.display = mode==='networth' ? '' : 'none';
   if(mode==='shopping') renderShoppingView();
   if(mode==='habits') renderHabitsView();
   if(mode==='health') renderHealthView();
+  if(mode==='networth') loadNetWorth();
 }
 
 function expandQuickAdd(){
@@ -2745,6 +2748,191 @@ function renderHealthView(){
     const dayWeight = weightLog.find(w=>w.date===day);
     weightNote.textContent = dayWeight ? `Logged: ${dayWeight.weight}` : `Not logged ${isToday?'today':'this day'}`;
   }
+}
+
+/* ---------- Net Wealth ---------- */
+
+let netWorthRows = null;   // parsed rows, oldest first
+let netWorthError = null;
+let netWorthLoading = false;
+let netWorthChartOpen = false;
+
+const NETWORTH_ASSET_COLS = ['Cash & Savings','Superannuation','Investments','Property','Vehicles & Personal Assets','Business Interests','Other Assets'];
+const NETWORTH_LIABILITY_COLS = ['Mortgage/Property Loans','Personal Loans','Car Loans','Investment Loans','Student Loans','Credit Card Debt','Other Liabilities'];
+
+// Minimal RFC4180-ish CSV line parser (handles quoted fields containing commas).
+function parseCsv(text){
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+  for(let i=0;i<text.length;i++){
+    const c = text[i];
+    if(inQuotes){
+      if(c === '"'){
+        if(text[i+1] === '"'){ field += '"'; i++; }
+        else inQuotes = false;
+      } else field += c;
+    } else {
+      if(c === '"') inQuotes = true;
+      else if(c === ','){ row.push(field); field = ''; }
+      else if(c === '\n'){ row.push(field); rows.push(row); row = []; field = ''; }
+      else if(c === '\r'){ /* skip */ }
+      else field += c;
+    }
+  }
+  if(field !== '' || row.length){ row.push(field); rows.push(row); }
+  return rows;
+}
+
+function parseCurrency(str){
+  if(str == null) return 0;
+  const cleaned = String(str).replace(/[^0-9.\-]/g, '');
+  const n = parseFloat(cleaned);
+  return isNaN(n) ? 0 : n;
+}
+
+function parseNetWorthCsv(text){
+  const rows = parseCsv(text);
+  if(!rows.length) return [];
+  const header = rows[0].map(h=>h.trim());
+  const idx = name => header.indexOf(name);
+  const dateIdx = idx('Date');
+  const notesIdx = header.length - 1; // trailing free-text column
+  const out = [];
+  for(let i=1;i<rows.length;i++){
+    const r = rows[i];
+    if(!r[dateIdx] || !r[dateIdx].trim()) continue; // skip blank trailing rows
+    const entry = { label: r[dateIdx].trim(), assets: {}, liabilities: {} };
+    NETWORTH_ASSET_COLS.forEach(col => { entry.assets[col] = parseCurrency(r[idx(col)]); });
+    NETWORTH_LIABILITY_COLS.forEach(col => { entry.liabilities[col] = parseCurrency(r[idx(col)]); });
+    entry.totalAssets = parseCurrency(r[idx('Total Assets')]);
+    entry.totalLiabilities = parseCurrency(r[idx('Total Liabilities')]);
+    entry.netWorth = parseCurrency(r[idx('Net Worth')]);
+    const notes = (r[notesIdx] || '').trim();
+    if(notes) entry.notes = notes;
+    out.push(entry);
+  }
+  return out;
+}
+
+function fmtMoney(n){
+  const sign = n < 0 ? '-' : '';
+  return sign + '$' + Math.round(Math.abs(n)).toLocaleString();
+}
+
+async function loadNetWorth(){
+  netWorthLoading = true;
+  netWorthError = null;
+  renderNetWorthView();
+  try{
+    const resp = await fetch('/api/networth');
+    if(!resp.ok){
+      const body = await resp.json().catch(()=>({}));
+      throw new Error(body.error || `Sheet fetch failed (${resp.status})`);
+    }
+    const csv = await resp.text();
+    netWorthRows = parseNetWorthCsv(csv);
+  }catch(e){
+    console.error(e);
+    netWorthError = e.message || 'Could not load the sheet';
+    netWorthRows = null;
+  }finally{
+    netWorthLoading = false;
+    renderNetWorthView();
+  }
+}
+
+function toggleNetWorthChart(){
+  netWorthChartOpen = !netWorthChartOpen;
+  renderNetWorthView();
+}
+
+function buildNetWorthChartSvg(data){
+  const w = 600, h = 180, padL = 46, padR = 12, padT = 12, padB = 20;
+  const vals = data.map(d=>d.netWorth);
+  let minV = Math.min(...vals, 0), maxV = Math.max(...vals);
+  const pad = (maxV-minV)*0.1 || 1000;
+  minV -= pad; maxV += pad;
+  const xAt = i => padL + (data.length>1 ? i/(data.length-1) : 0) * (w-padL-padR);
+  const yAt = v => padT + (h-padT-padB) * (1 - (v-minV)/(maxV-minV));
+  const points = data.map((d,i)=> `${xAt(i)},${yAt(d.netWorth)}`).join(' ');
+  const dots = data.map((d,i)=> `<circle cx="${xAt(i)}" cy="${yAt(d.netWorth)}" r="3" fill="var(--accent)"/>`).join('');
+  const firstLabel = data[0].label, lastLabel = data[data.length-1].label;
+  return `<svg viewBox="0 0 ${w} ${h}" class="weight-chart-svg">
+    <polyline points="${points}" fill="none" stroke="var(--accent)" stroke-width="2"/>
+    ${dots}
+    <text x="${padL}" y="${h-4}" font-size="9" fill="var(--ink-soft)">${firstLabel}</text>
+    <text x="${w-padR}" y="${h-4}" font-size="9" fill="var(--ink-soft)" text-anchor="end">${lastLabel}</text>
+  </svg>`;
+}
+
+function netWorthBreakdownHtml(entry){
+  const rows = (cols, obj) => cols
+    .filter(c => obj[c] !== 0)
+    .map(c => `<div class="listrow" style="justify-content:space-between;"><span>${c}</span><span>${fmtMoney(obj[c])}</span></div>`)
+    .join('');
+  const assetRows = rows(NETWORTH_ASSET_COLS, entry.assets);
+  const liabRows = rows(NETWORTH_LIABILITY_COLS, entry.liabilities);
+  return `
+    <div class="quad q2">
+      <h3>Assets<span style="font-weight:400;text-transform:none;">${fmtMoney(entry.totalAssets)}</span></h3>
+      ${assetRows || '<div class="empty">Nothing here.</div>'}
+    </div>
+    <div class="quad q1">
+      <h3>Liabilities<span style="font-weight:400;text-transform:none;">${fmtMoney(entry.totalLiabilities)}</span></h3>
+      ${liabRows || '<div class="empty">Nothing here.</div>'}
+    </div>
+  `;
+}
+
+function renderNetWorthView(){
+  const el = document.getElementById('networthContent');
+  if(!el) return;
+
+  if(netWorthLoading && !netWorthRows){
+    el.innerHTML = `<div class="empty">Loading from sheet...</div>`;
+    return;
+  }
+  if(netWorthError){
+    el.innerHTML = `<div class="empty">Couldn't load the sheet: ${netWorthError}<br><br>Check NETWORTH_CSV_URL is set in Vercel, and that the sheet is still published to web.</div>`;
+    return;
+  }
+  if(!netWorthRows || !netWorthRows.length){
+    el.innerHTML = `<div class="empty">No entries in the sheet yet.</div>`;
+    return;
+  }
+
+  const latest = netWorthRows[netWorthRows.length - 1];
+  const prev = netWorthRows.length > 1 ? netWorthRows[netWorthRows.length - 2] : null;
+  const delta = prev ? latest.netWorth - prev.netWorth : null;
+  const deltaPct = prev && prev.netWorth !== 0 ? (delta / Math.abs(prev.netWorth)) * 100 : null;
+
+  let deltaHtml = '';
+  if(delta != null){
+    const cls = delta >= 0 ? 'pace-ahead' : 'pace-behind';
+    const arrow = delta >= 0 ? '&#9650;' : '&#9660;';
+    deltaHtml = `<span class="pace-badge ${cls}">${arrow} ${fmtMoney(Math.abs(delta))}${deltaPct!=null ? ' ('+deltaPct.toFixed(1)+'%)' : ''}</span> <span>since ${prev.label}</span>`;
+  }
+
+  el.innerHTML = `
+    <div class="weight-goal-card">
+      <div class="weight-goal-top">
+        <div class="weight-goal-stats">
+          <div class="wg-stat current"><span class="wg-num">${fmtMoney(latest.netWorth)}</span><span class="wg-lbl">Net Worth &middot; ${latest.label}</span></div>
+          <div class="wg-stat"><span class="wg-num">${fmtMoney(latest.totalAssets)}</span><span class="wg-lbl">Total Assets</span></div>
+          <div class="wg-stat"><span class="wg-num">${fmtMoney(latest.totalLiabilities)}</span><span class="wg-lbl">Total Liabilities</span></div>
+        </div>
+      </div>
+      ${deltaHtml ? `<div class="weight-goal-deadline">${deltaHtml}</div>` : ''}
+      ${latest.notes ? `<div class="health-weight-note">Note: ${latest.notes}</div>` : ''}
+      ${netWorthRows.length > 1 ? `
+        <div class="weight-chart-toggle" onclick="toggleNetWorthChart()">${netWorthChartOpen ? '&#9650; Hide trend chart' : '&#9660; View trend chart'}</div>
+        ${netWorthChartOpen ? `<div class="weight-chart-wrap">${buildNetWorthChartSvg(netWorthRows)}</div>` : ''}
+      ` : ''}
+    </div>
+    <div class="matrix">
+      ${netWorthBreakdownHtml(latest)}
+    </div>
+  `;
 }
 
 checkSession();

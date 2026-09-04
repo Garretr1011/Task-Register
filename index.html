@@ -28,6 +28,7 @@
   <button class="modebtn" id="modeShoppingBtn" onclick="switchMode('shopping')">Shopping</button>
   <button class="modebtn" id="modeHabitsBtn" onclick="switchMode('habits')">Habits</button>
   <button class="modebtn" id="modeHealthBtn" onclick="switchMode('health')">Health Log</button>
+  <button class="modebtn" id="modeNetworthBtn" onclick="switchMode('networth')">Net Wealth</button>
 </div>
 
 <div id="tasksMode">
@@ -247,6 +248,19 @@
         <div class="health-weight-note" id="weightNote"></div>
       </div>
     </div>
+  </div>
+</div>
+
+<div id="networthMode" style="display:none;">
+  <div class="shop-header">
+    <div>
+      <h1>Net Wealth</h1>
+      <div class="sub">Synced from your net worth spreadsheet</div>
+    </div>
+    <button class="navbtn" id="networthRefreshBtn" onclick="loadNetWorth()" title="Refresh from sheet">&#8635;</button>
+  </div>
+  <div class="shop-body">
+    <div id="networthContent"></div>
   </div>
 </div>
 
