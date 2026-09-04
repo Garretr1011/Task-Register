@@ -343,7 +343,8 @@ async function loadTasks(){
   await rolloverTasks();
   initHistory();
   document.getElementById('qaDue').value = todayStr();
-  document.getElementById('dailyQuote').textContent = todaysQuote();
+  const dq = document.getElementById('dailyQuote');
+  if(dq) dq.textContent = todaysQuote();
   render();
 }
 
@@ -1712,6 +1713,17 @@ function switchMode(mode){
   if(mode==='shopping') renderShoppingView();
   if(mode==='habits') renderHabitsView();
   if(mode==='health') renderHealthView();
+}
+
+function expandQuickAdd(){
+  document.getElementById('qaCollapsed').style.display = 'none';
+  document.getElementById('qaExpanded').style.display = 'flex';
+  document.getElementById('qaTitle').focus();
+}
+
+function collapseQuickAdd(){
+  document.getElementById('qaExpanded').style.display = 'none';
+  document.getElementById('qaCollapsed').style.display = 'block';
 }
 
 function switchTab(view){

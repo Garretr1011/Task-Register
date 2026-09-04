@@ -38,8 +38,6 @@
   <div class="tb-left">
     <div>
       <h1>Task Register</h1>
-      <div class="sub">BSF Design Solutions — Personal</div>
-      <div class="quote" id="dailyQuote"></div>
     </div>
     <button class="signout-btn" onclick="signOut()">Sign out</button>
   </div>
@@ -52,52 +50,57 @@
   </div>
 </div>
 
-<div class="statsbar">
-  <div class="stat-chip" onclick="filterOpen()"><span class="num" id="statOpen">0</span><span class="lbl">Open</span></div>
-  <div class="stat-chip" onclick="switchTab('today')"><span class="num" id="statToday">0</span><span class="lbl">Today</span></div>
-  <div class="stat-chip" onclick="filterDoFirst()"><span class="num" id="statUrgent">0</span><span class="lbl">Do First</span></div>
-  <div class="stat-chip"><span class="num" id="wsCompleted">0</span><span class="lbl">Done Wk</span></div>
-  <div class="stat-chip"><span class="num" id="wsAdded">0</span><span class="lbl">Added Wk</span></div>
-  <div class="stat-chip"><span class="num" id="wsDue">0</span><span class="lbl">Due Wk</span></div>
-  <div class="stat-chip"><span class="num" id="wsRate">0%</span><span class="lbl">Rate</span></div>
+<div class="statssearch-row">
+  <div class="statsbar">
+    <div class="stat-chip" onclick="filterOpen()"><span class="num" id="statOpen">0</span><span class="lbl">Open</span></div>
+    <div class="stat-chip" onclick="switchTab('today')"><span class="num" id="statToday">0</span><span class="lbl">Today</span></div>
+    <div class="stat-chip" onclick="filterDoFirst()"><span class="num" id="statUrgent">0</span><span class="lbl">Do First</span></div>
+    <div class="stat-chip"><span class="num" id="wsCompleted">0</span><span class="lbl">Done Wk</span></div>
+    <div class="stat-chip"><span class="num" id="wsAdded">0</span><span class="lbl">Added Wk</span></div>
+    <div class="stat-chip"><span class="num" id="wsDue">0</span><span class="lbl">Due Wk</span></div>
+    <div class="stat-chip"><span class="num" id="wsRate">0%</span><span class="lbl">Rate</span></div>
+  </div>
+  <div class="searchbar-inline">
+    <input type="text" id="searchInput" placeholder="Search tasks...">
+    <span class="searchclear" id="searchClearBtn" onclick="clearSearch()" style="display:none;">&times;</span>
+  </div>
 </div>
 
 <div class="leavebanner" id="leaveBanner"></div>
 
-<div class="searchbar">
-  <input type="text" id="searchInput" placeholder="Search tasks...">
-  <span class="searchclear" id="searchClearBtn" onclick="clearSearch()" style="display:none;">&times; Clear</span>
-</div>
-
-<div class="quickadd">
-  <div class="qa-row1">
-    <input type="text" id="qaTitle" placeholder="Add a task and hit enter...">
-    <button type="button" class="mic-btn" id="micBtn" onclick="toggleVoice()" title="Add by voice">&#127908;</button>
-  </div>
-  <div class="qa-row2">
-    <div class="chip" id="chipUrgent" onclick="toggleChip('urgent')">Urgent</div>
-    <div class="chip" id="chipImportant" onclick="toggleChip('important')">Important</div>
-    <select id="qaBucket" onchange="onBucketChange()">
-      <option value="today">Today</option>
-      <option value="week">This Week</option>
-      <option value="recurring">Recurring</option>
-    </select>
-    <select id="qaCategory"></select>
-    <div class="chip addcat" onclick="openCategoryModal()">+ Category</div>
-    <div class="qa-due-group">
-      <label class="qa-label" for="qaDue">Due Date</label>
-      <input type="date" id="qaDue">
+<div class="quickadd" id="quickadd">
+  <div class="qa-collapsed" id="qaCollapsed" onclick="expandQuickAdd()">+ Add a task...</div>
+  <div class="qa-expanded" id="qaExpanded" style="display:none;">
+    <span class="qa-collapse-btn" onclick="collapseQuickAdd()" title="Collapse">&times;</span>
+    <div class="qa-row1">
+      <input type="text" id="qaTitle" placeholder="Add a task and hit enter...">
+      <button type="button" class="mic-btn" id="micBtn" onclick="toggleVoice()" title="Add by voice">&#127908;</button>
     </div>
-    <div class="recur-days" id="recurDays">
-      <div class="day-chip" data-d="0">S</div>
-      <div class="day-chip" data-d="1">M</div>
-      <div class="day-chip" data-d="2">T</div>
-      <div class="day-chip" data-d="3">W</div>
-      <div class="day-chip" data-d="4">T</div>
-      <div class="day-chip" data-d="5">F</div>
-      <div class="day-chip" data-d="6">S</div>
+    <div class="qa-row2">
+      <div class="chip" id="chipUrgent" onclick="toggleChip('urgent')">Urgent</div>
+      <div class="chip" id="chipImportant" onclick="toggleChip('important')">Important</div>
+      <select id="qaBucket" onchange="onBucketChange()">
+        <option value="today">Today</option>
+        <option value="week">This Week</option>
+        <option value="recurring">Recurring</option>
+      </select>
+      <select id="qaCategory"></select>
+      <div class="chip addcat" onclick="openCategoryModal()">+ Category</div>
+      <div class="qa-due-group">
+        <label class="qa-label" for="qaDue">Due Date</label>
+        <input type="date" id="qaDue">
+      </div>
+      <div class="recur-days" id="recurDays">
+        <div class="day-chip" data-d="0">S</div>
+        <div class="day-chip" data-d="1">M</div>
+        <div class="day-chip" data-d="2">T</div>
+        <div class="day-chip" data-d="3">W</div>
+        <div class="day-chip" data-d="4">T</div>
+        <div class="day-chip" data-d="5">F</div>
+        <div class="day-chip" data-d="6">S</div>
+      </div>
+      <button class="btn-add" onclick="addTask()">Add</button>
     </div>
-    <button class="btn-add" onclick="addTask()">Add</button>
   </div>
 </div>
 
